@@ -1,0 +1,4 @@
+[[operations]]
+type = "GroupBy"
+columns = ["name"]
+aggregate = [{ column = "age", function = "mean" }]
