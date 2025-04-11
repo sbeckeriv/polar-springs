@@ -3,8 +3,9 @@ use crate::{
     Cli,
 };
 
-use polars::prelude::*;
+use polars::{lazy::frame, prelude::*};
 use polars_io::avro::AvroReader;
+
 use std::fs;
 use tracing::{error, info};
 
@@ -99,20 +100,42 @@ fn operations(df: LazyFrame, config: &Config) -> Result<LazyFrame, Box<dyn std::
                 right_on,
                 how,
             } => todo!(),
-            config::Operation::WithColumn { name, expression } => todo!(),
+            config::Operation::WithColumn { name, expression } => {
+                df = df.with_column(expression.to_polars_expr()?);
+            }
             config::Operation::Pivot {
                 index,
                 columns,
                 values,
                 aggregate_function,
-            } => todo!(),
-            config::Operation::Window {
-                column,
-                function,
-                window_size,
-                output_column,
-            } => todo!(),
+            } => {
+                // how do i use pivot?
+            }
             config::Operation::Rename { mappings } => todo!(),
+            config::Operation::PivotAdvanced {
+                index,
+                columns,
+                values,
+            } => {
+                // Create a dictionary of value column -> aggregation function
+                let mut agg_exprs: Vec<Expr> = Vec::new();
+                for agg in values {
+                    agg_exprs.push(agg.to_polars_expr()?);
+                }
+
+                // Build the pivot operation
+                let pivot_expr = df
+                    .clone()
+                    .lazy()
+                    .group_by(index.iter().map(|s| col(s)).collect::<Vec<_>>())
+                    .agg(agg_exprs)
+                    .collect()?;
+
+                df = pivot_expr.lazy();
+            }
+            config::Operation::Window { .. } => {
+                df = df.lazy().with_column(operation.to_polars_expr()?);
+            }
         }
     }
     Ok(df)

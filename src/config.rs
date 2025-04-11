@@ -1,5 +1,8 @@
 use chrono::NaiveDate;
-use polars::prelude::{col, lit, DataType, NULL};
+use polars::{
+    prelude::{col, lit, DataType, Expr, SortOptions, NULL},
+    time::Window,
+};
 use serde::Deserialize;
 
 #[derive(Deserialize, Debug)]
@@ -71,17 +74,61 @@ pub enum Operation {
         values: String,
         aggregate_function: AllowedGroupFunction,
     },
+    PivotAdvanced {
+        index: Vec<String>,     // Column(s) to use as index/row labels
+        columns: String,        // Column whose values will become new columns
+        values: Vec<Aggregate>, // Columns with values and their aggregation functions
+    },
 
     Window {
-        column: String,
-        function: WindowFunction,
-        window_size: usize,
-        output_column: String,
+        column: String,            // Column to apply the function to
+        function: WindowFunction,  // Window function to apply
+        partition_by: Vec<String>, // Columns to partition by (optional)
+        order_by: Vec<String>,     // Columns to order by (optional)
+        #[serde(default)]
+        descending: Vec<bool>, // Whether to sort in descending order (optional)
+        #[serde(default)]
+        bounds: Option<WindowBound>, // Window bounds (optional)
+        name: String,              // Name for the resulting column
     },
 
     Rename {
         mappings: Vec<ColumnRename>,
     },
+}
+
+#[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all = "lowercase")]
+pub enum WindowFunction {
+    Sum,
+    Min,
+    Max,
+    Mean,
+    Count,
+    First,
+    Last,
+    Rank,
+    DenseRank,
+    RowNumber,
+    CumSum,
+    CumMin,
+    CumMax,
+    Lag {
+        offset: u32,
+        default_value: Option<LiteralValue>,
+    },
+    Lead {
+        offset: u32,
+        default_value: Option<LiteralValue>,
+    },
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct WindowBound {
+    #[serde(default)]
+    pub preceding: Option<usize>,
+    #[serde(default)]
+    pub following: Option<usize>,
 }
 
 // move to tryfrom
@@ -91,6 +138,73 @@ impl Operation {
             Operation::Select { .. } => {
                 unreachable!("Select operation should be handled in the main function")
             }
+            Operation::Window {
+                column,
+                function,
+                partition_by,
+                order_by,
+                descending,
+                bounds,
+                name,
+            } => {
+                let mut ordering = Vec::new();
+                for (i, col_name) in order_by.iter().enumerate() {
+                    let is_desc = if i < descending.len() {
+                        descending[i]
+                    } else {
+                        false
+                    };
+                    let sort_opt = SortOptions {
+                        descending: is_desc,
+                        nulls_last: false,
+                        ..Default::default()
+                    };
+                    ordering.push(col(col_name).sort(sort_opt));
+                }
+
+                let partition_exprs: Vec<Expr> = partition_by.iter().map(|s| col(s)).collect();
+                // Configure window function with appropriate options
+                let window_expr = match function {
+                    WindowFunction::Sum => col(column).sum().over(partition_exprs.clone()),
+                    WindowFunction::Min => col(column).min().over(partition_exprs.clone()),
+                    WindowFunction::Max => col(column).max().over(partition_exprs.clone()),
+                    WindowFunction::Mean => col(column).mean().over(partition_exprs.clone()),
+                    WindowFunction::Count => col(column).count().over(partition_exprs.clone()),
+                    WindowFunction::First => col(column).first().over(partition_exprs.clone()),
+                    WindowFunction::Last => col(column).last().over(partition_exprs.clone()),
+                    WindowFunction::CumSum => {
+                        col(column).cum_sum(false).over(partition_exprs.clone())
+                    }
+                    WindowFunction::Lag {
+                        offset,
+                        default_value,
+                    } => {
+                        let mut expr = col(column).shift(lit(*offset));
+                        if let Some(default) = default_value {
+                            expr = expr.fill_null(lit_to_expr(default));
+                        }
+                        expr.over(partition_exprs.clone())
+                    }
+                    WindowFunction::Lead {
+                        offset,
+                        default_value,
+                    } => {
+                        let mut expr = col(column).shift(lit(*offset));
+                        if let Some(default) = default_value {
+                            expr = expr.fill_null(lit_to_expr(default));
+                        }
+                        expr.over(partition_exprs.clone())
+                    }
+                    WindowFunction::Rank => todo!(),
+                    WindowFunction::DenseRank => todo!(),
+                    WindowFunction::RowNumber => todo!(),
+                    WindowFunction::CumMin => todo!(),
+                    WindowFunction::CumMax => todo!(),
+                };
+
+                Ok(window_expr)
+            }
+
             Operation::Filter {
                 column,
                 condition,
@@ -402,16 +516,6 @@ pub enum TimeUnit {
     Quarters,
     Years,
 }
-#[derive(Deserialize, Debug)]
-pub enum WindowFunction {
-    RollingMean,
-    RollingSum,
-    CumulativeSum,
-    Lag(u32),
-    Lead(u32),
-    Rank,
-    PercentRank,
-}
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(untagged)]
@@ -437,4 +541,18 @@ pub enum JoinType {
     Cross,
     Semi,
     Anti,
+}
+fn lit_to_expr(value: &LiteralValue) -> Expr {
+    match value {
+        LiteralValue::String(s) => lit(s.clone()),
+        LiteralValue::Integer(i) => lit(*i),
+        LiteralValue::Float(f) => lit(*f),
+        LiteralValue::Boolean(b) => lit(*b),
+        LiteralValue::Null => lit(NULL),
+        LiteralValue::Date(naive_date) => todo!(),
+        LiteralValue::DateTime(date_time) => todo!(),
+        LiteralValue::StringList(items) => todo!(),
+        LiteralValue::IntegerList(items) => todo!(),
+        LiteralValue::FloatList(items) => todo!(),
+    }
 }
