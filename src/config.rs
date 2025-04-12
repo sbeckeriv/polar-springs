@@ -1,8 +1,4 @@
-use chrono::{format, NaiveDate};
-use polars::{
-    prelude::{col, lit, when, DataType, Expr, SortOptions, NULL},
-    time::Window,
-};
+use polars::prelude::{col, lit, when, DataType, Expr, SortOptions, NULL};
 use serde::Deserialize;
 
 #[derive(Deserialize, Debug)]
@@ -148,7 +144,7 @@ impl Operation {
                 aggregate,
             } => {
                 // Create time bucket column
-                let mut expr = col(time_column);
+                let expr = col(time_column);
                 let truncate = match unit {
                     TimeUnit::Seconds => lit(format!("{every}s")),
                     TimeUnit::Minutes => lit(format!("{every}m")),
@@ -188,7 +184,7 @@ impl Operation {
                     ordering.push(col(col_name).sort(sort_opt));
                 }
 
-                let partition_exprs: Vec<Expr> = partition_by.iter().map(|s| col(s)).collect();
+                let partition_exprs: Vec<Expr> = partition_by.iter().map(col).collect();
                 // Configure window function with appropriate options
                 let window_expr = match function {
                     WindowFunction::Sum => col(column).sum().over(partition_exprs.clone()),

@@ -2,7 +2,6 @@ use clap::Parser;
 use clap_derive::Parser;
 use ploars_cli::runner::run;
 use tracing::{error, info};
-use tracing_subscriber;
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]

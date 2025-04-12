@@ -1,6 +1,6 @@
-use crate::config::{self, AllowedGroupFunction, Config, FilterField};
+use crate::config::{self, Config};
 
-use polars::{lazy::frame, prelude::*};
+use polars::prelude::*;
 use polars_io::avro::AvroReader;
 
 use std::fs;
@@ -79,7 +79,7 @@ fn operations(df: LazyFrame, config: &Config) -> Result<LazyFrame, Box<dyn std::
                     maintain_order: true,
                     multithreaded: true,
                 };
-                df = df.sort([&*column], sort_options);
+                df = df.sort([column], sort_options);
             }
             config::Operation::GroupByDynamic { columns, aggregate } => todo!(),
             config::Operation::Join {
@@ -111,7 +111,7 @@ fn operations(df: LazyFrame, config: &Config) -> Result<LazyFrame, Box<dyn std::
                 let pivot_expr = df
                     .clone()
                     .lazy()
-                    .group_by(index.iter().map(|s| col(s)).collect::<Vec<_>>())
+                    .group_by(index.iter().map(col).collect::<Vec<_>>())
                     .agg(agg_exprs)
                     .collect()?;
 

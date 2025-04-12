@@ -1,4 +1,4 @@
-use chrono::{DateTime, Duration, Local, NaiveDateTime, TimeZone, Timelike, Utc};
+use chrono::{DateTime, Duration, Local, TimeZone, Timelike};
 use rand::distributions::{Distribution, WeightedIndex};
 use rand::prelude::*;
 use rand_distr::{Gamma, LogNormal};
@@ -52,14 +52,12 @@ fn main() -> std::io::Result<()> {
     let end_date = start_date + Duration::days(7);
 
     // Services with weights
-    let services = vec![
-        "api-gateway",
+    let services = ["api-gateway",
         "auth-service",
         "user-service",
         "product-service",
         "payment-service",
-        "search-service",
-    ];
+        "search-service"];
     let service_weights = vec![0.3, 0.15, 0.2, 0.15, 0.1, 0.1];
     let service_dist = WeightedIndex::new(&service_weights).unwrap();
 
@@ -107,7 +105,7 @@ fn main() -> std::io::Result<()> {
     );
 
     // HTTP methods with weights
-    let methods = vec!["GET", "POST", "PUT", "DELETE"];
+    let methods = ["GET", "POST", "PUT", "DELETE"];
     let method_weights = vec![0.7, 0.15, 0.1, 0.05];
     let method_dist = WeightedIndex::new(&method_weights).unwrap();
 
@@ -131,7 +129,7 @@ fn main() -> std::io::Result<()> {
     let sum_weights: f64 = user_weights.iter().sum();
     user_weights = user_weights
         .iter()
-        .map(|&w| w as f64 / sum_weights)
+        .map(|&w| w / sum_weights)
         .collect();
     let user_dist = WeightedIndex::new(&user_weights).unwrap();
 
@@ -176,15 +174,13 @@ fn main() -> std::io::Result<()> {
     }
 
     // Database services
-    let db_names = vec!["users_db", "products_db", "transactions_db", "analytics_db"];
+    let db_names = ["users_db", "products_db", "transactions_db", "analytics_db"];
 
     // User agents
-    let user_agents = vec![
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/91.0.4472.124",
+    let user_agents = ["Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/91.0.4472.124",
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605.1.15",
         "Mozilla/5.0 (iPhone; CPU iPhone OS 14_6) Mobile Safari/604.1",
-        "Mozilla/5.0 (Linux; Android 11) Chrome/91.0.4472.120 Mobile",
-    ];
+        "Mozilla/5.0 (Linux; Android 11) Chrome/91.0.4472.120 Mobile"];
 
     // Generate timestamps with business hour patterns
     let mut timestamps = generate_timestamps(n_logs, start_date, end_date, &mut rng);
