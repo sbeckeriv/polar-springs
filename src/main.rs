@@ -1,11 +1,8 @@
 use clap::Parser;
 use clap_derive::Parser;
+use ploars_cli::runner::run;
 use tracing::{error, info};
 use tracing_subscriber;
-
-mod config;
-mod runner;
-use runner::run;
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -20,6 +17,7 @@ struct Cli {
 }
 
 fn main() {
+    // Initialize tracing
     tracing_subscriber::fmt::init();
 
     let cli = Cli::parse();
@@ -29,7 +27,7 @@ fn main() {
         cli.config, cli.input
     );
 
-    if let Err(e) = run(cli) {
+    if let Err(e) = run(cli.config, cli.input) {
         error!("Application error: {}", e);
         std::process::exit(1);
     }

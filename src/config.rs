@@ -11,7 +11,7 @@ pub struct Config {
 }
 
 #[derive(Deserialize, Debug)]
-enum AllowedFilterCondition {
+pub enum AllowedFilterCondition {
     EQ,
     EQMISSING,
     NEQ,
@@ -251,7 +251,6 @@ impl Operation {
                     AllowedFilterCondition::GTE => Ok(col.gt_eq(filter_expr?)),
                     AllowedFilterCondition::ISNULL => Ok(col.is_null()),
                     AllowedFilterCondition::ISNOTNULL => Ok(col.is_not_null()),
-                    _ => return Err("Unsupported filter condition".to_string()),
                 }
             }
             _ => Err("Unsupported operation".to_string()),
@@ -426,8 +425,6 @@ impl Expression {
                     ExpressionOperation::CONCAT => {
                         Ok(left_expr.cast(DataType::String) + right_expr.cast(DataType::String))
                     }
-
-                    _ => Err(format!("Unsupported binary operation: {:?}", op)),
                 }
             }
 
@@ -511,8 +508,6 @@ impl Expression {
                         }
                         */
                     }
-
-                    _ => Err(format!("Unsupported function: {:?}", name)),
                 }
             }
 

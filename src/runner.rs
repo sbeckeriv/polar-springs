@@ -1,7 +1,4 @@
-use crate::{
-    config::{self, AllowedGroupFunction, Config, FilterField},
-    Cli,
-};
+use crate::config::{self, AllowedGroupFunction, Config, FilterField};
 
 use polars::{lazy::frame, prelude::*};
 use polars_io::avro::AvroReader;
@@ -9,29 +6,26 @@ use polars_io::avro::AvroReader;
 use std::fs;
 use tracing::{error, info};
 
-pub fn run(cli: Cli) -> Result<DataFrame, Box<dyn std::error::Error>> {
+pub fn run(
+    config_path: String,
+    input_path: String,
+) -> Result<DataFrame, Box<dyn std::error::Error>> {
     // Placeholder for TOML parsing and Polars logic
-    info!("Parsing TOML configuration from: {}", cli.config);
-    info!("Processing input data from: {}", cli.input);
+    info!("Parsing TOML configuration from: {}", config_path);
+    info!("Processing input data from: {}", input_path);
 
     // Parse the TOML configuration file
-    let config_content = fs::read_to_string(&cli.config)?;
+    let config_content = fs::read_to_string(&config_path)?;
     let config: Config = toml::from_str(&config_content)?;
     info!("Parsed configuration: {:?}", config);
-    let file = std::fs::File::open(&cli.input)?;
+    let file = std::fs::File::open(&input_path)?;
     // Load the input data into a Polars DataFrame
-    let mut df = match cli.input.to_lowercase().split(".").last() {
+    let mut df = match input_path.to_lowercase().split(".").last() {
         Some("csv") => CsvReader::new(file).finish()?.lazy(),
         Some("json") => JsonLineReader::new(file).finish()?.lazy(),
-        Some("parquet") => ParquetReader::new(std::fs::File::open(&cli.input)?)
-            .finish()?
-            .lazy(),
-        Some("ipc") => IpcReader::new(std::fs::File::open(&cli.input)?)
-            .finish()?
-            .lazy(),
-        Some("avro") => AvroReader::new(std::fs::File::open(&cli.input)?)
-            .finish()?
-            .lazy(),
+        Some("parquet") => ParquetReader::new(file).finish()?.lazy(),
+        Some("ipc") => IpcReader::new(file).finish()?.lazy(),
+        Some("avro") => AvroReader::new(file).finish()?.lazy(),
         _ => {
             error!(
                 "Unsupported file format. Supported formats are: csv, json, parquet, ipc, avro."

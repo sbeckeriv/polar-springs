@@ -2,6 +2,17 @@
 name = "polars_cli"
 version = "0.1.0"
 edition = "2021"
+
+[[bin]]
+name = "polars_cli"
+path = "src/main.rs"
+
+# This section defines the library
+[lib]
+name = "ploars_cli"
+path = "src/lib.rs"
+
+
 [[example]]
 name = "log_generator"
 
