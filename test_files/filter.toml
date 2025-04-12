@@ -4,7 +4,3 @@ column = "age"
 condition = "gt"
 filter = "30"
 
-[[operations]]
-type = "GroupBy"
-column = "age"
-filter = "30"
