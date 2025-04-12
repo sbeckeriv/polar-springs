@@ -2186,11 +2186,15 @@ dependencies = [
  "polars",
  "polars-core",
  "polars-io",
+ "rand 0.8.5",
+ "rand_distr",
  "serde",
+ "serde_json",
  "tokio",
  "toml",
  "tracing",
  "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]

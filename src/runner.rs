@@ -82,18 +82,12 @@ fn operations(df: LazyFrame, config: &Config) -> Result<LazyFrame, Box<dyn std::
                     descending: [reverse].into(),
                     nulls_last: [false].into(),
                     limit: *limit,
-                    maintain_order: false,
+                    maintain_order: true,
                     multithreaded: true,
                 };
                 df = df.sort([&*column], sort_options);
             }
             config::Operation::GroupByDynamic { columns, aggregate } => todo!(),
-            config::Operation::GroupByTime {
-                time_column,
-                every,
-                unit,
-                aggregate,
-            } => todo!(),
             config::Operation::Join {
                 right_df,
                 left_on,
@@ -112,11 +106,7 @@ fn operations(df: LazyFrame, config: &Config) -> Result<LazyFrame, Box<dyn std::
                 // how do i use pivot?
             }
             config::Operation::Rename { mappings } => todo!(),
-            config::Operation::PivotAdvanced {
-                index,
-                columns,
-                values,
-            } => {
+            config::Operation::PivotAdvanced { index, values, .. } => {
                 // Create a dictionary of value column -> aggregation function
                 let mut agg_exprs: Vec<Expr> = Vec::new();
                 for agg in values {
@@ -135,6 +125,33 @@ fn operations(df: LazyFrame, config: &Config) -> Result<LazyFrame, Box<dyn std::
             }
             config::Operation::Window { .. } => {
                 df = df.lazy().with_column(operation.to_polars_expr()?);
+            }
+            config::Operation::GroupByTime {
+                output_column,
+                additional_groups,
+                aggregate,
+                ..
+            } => {
+                let time_bucket_col = output_column.as_deref().unwrap_or("time_bucket");
+                let truncate_expr = operation.to_polars_expr()?;
+                // Create a DataFrame with the time bucket
+                let df_with_bucket = df.clone().lazy().with_column(truncate_expr).collect()?;
+
+                // Build the group by columns (time bucket + additional groups)
+                let mut group_cols = vec![time_bucket_col];
+                group_cols.extend(additional_groups.iter().map(|s| s.as_str()));
+
+                // Prepare the aggregation expressions
+                let agg_exprs = aggregate
+                    .iter()
+                    .flat_map(|agg| agg.to_polars_expr())
+                    .collect::<Vec<_>>();
+                df = df_with_bucket
+                    .lazy()
+                    .group_by(group_cols)
+                    .agg(agg_exprs)
+                    .collect()?
+                    .lazy();
             }
         }
     }

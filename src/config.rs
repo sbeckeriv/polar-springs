@@ -1,6 +1,6 @@
-use chrono::NaiveDate;
+use chrono::{format, NaiveDate};
 use polars::{
-    prelude::{col, lit, DataType, Expr, SortOptions, NULL},
+    prelude::{col, lit, when, DataType, Expr, SortOptions, NULL},
     time::Window,
 };
 use serde::Deserialize;
@@ -48,6 +48,10 @@ pub enum Operation {
         time_column: String,
         every: u32,
         unit: TimeUnit,
+        #[serde(default)]
+        output_column: Option<String>, // Name for the resulting time bucket column
+        #[serde(default)]
+        additional_groups: Vec<String>, // Additional columns to group by
         aggregate: Vec<Aggregate>,
     },
     Sort {
@@ -135,6 +139,28 @@ pub struct WindowBound {
 impl Operation {
     pub fn to_polars_expr(&self) -> Result<polars::prelude::Expr, String> {
         match self {
+            Operation::GroupByTime {
+                time_column,
+                every,
+                unit,
+                output_column,
+                additional_groups,
+                aggregate,
+            } => {
+                // Create time bucket column
+                let mut expr = col(time_column);
+                let truncate = match unit {
+                    TimeUnit::Seconds => lit(format!("{every}s")),
+                    TimeUnit::Minutes => lit(format!("{every}m")),
+                    TimeUnit::Hours => lit(format!("{every}h")),
+                    TimeUnit::Days => lit(format!("{every}d")),
+                    TimeUnit::Weeks => lit(format!("{every}w")),
+                    TimeUnit::Months => todo!(),
+                    TimeUnit::Quarters => todo!(),
+                    TimeUnit::Years => lit(format!("{every}y")),
+                };
+                Ok(expr.dt().truncate(truncate))
+            }
             Operation::Select { .. } => {
                 unreachable!("Select operation should be handled in the main function")
             }
@@ -498,8 +524,7 @@ impl Expression {
                 let cond_expr = condition.to_polars_expr()?;
                 let then_expr = then.to_polars_expr()?;
                 let else_expr = otherwise.to_polars_expr()?;
-                todo!();
-                //Ok(polars::when(cond_expr).then(then_expr).otherwise(else_expr))
+                Ok(when(cond_expr).then(then_expr).otherwise(else_expr))
             }
         }
     }
