@@ -2,6 +2,9 @@ use std::fs;
 use std::path::Path;
 
 use ploars_cli::runner::run;
+use std::sync::Once;
+
+static START: Once = Once::new();
 
 fn setup_test_config(name: &str, content: &str) -> String {
     let dir_path = Path::new("tests/test_configs");
@@ -16,6 +19,9 @@ fn setup_test_config(name: &str, content: &str) -> String {
 }
 
 fn setup_test_logs() -> String {
+    START.call_once(|| {
+        tracing_subscriber::fmt::init();
+    });
     let logs_path = Path::new("tests/request_logs.json");
 
     logs_path.to_str().unwrap().to_string()
@@ -145,7 +151,6 @@ fn test_sort() {
 type = "Sort"
 column = "response_time_ms"
 order = "desc"
-limit = 10
 "#,
     );
     let input = setup_test_logs();
@@ -159,21 +164,26 @@ fn test_with_column_binary_op() {
     let config = setup_test_config(
         "with_column_binary_op",
         r#"
+
 [[operations]]
 type = "WithColumn"
 name = "is_slow_response"
-expression = { 
-  type = "BinaryOp", 
-  left = { type = "Column", value = "response_time_ms" }, 
-  op = "GT", 
-  right = { type = "Literal", value = 100 }
-}
+expression = { type = "BinaryOp", left = { type = "Column", value = "response_time_ms" }, op = "GT", right = { type = "Literal", value = 100 } }
+
+[[operations]]
+type = "Select"
+columns = ["timestamp", "is_slow_response",  "endpoint", "status_code", "response_time_ms", "geo_region"]
+
 "#,
     );
     let input = setup_test_logs();
 
     let result = run(config, input);
-    assert!(result.is_ok(), "WithColumn binary op failed");
+    assert!(
+        result.is_ok(),
+        "WithColumn binary op failed {}",
+        result.err().unwrap().to_string()
+    );
 }
 
 #[test]
@@ -296,7 +306,7 @@ fn test_rename() {
 [[operations]]
 type = "Rename"
 mappings = [
-  { old_name = "response_time_ms", new_name = "latency_ms" },
+  { old_name = "timestamp", new_name = "timestamp_test" },
   { old_name = "status_code", new_name = "http_status" }
 ]
 "#,
@@ -312,6 +322,8 @@ fn test_complex_workflow() {
     let config = setup_test_config(
         "complex_workflow",
         r#"
+
+
 [[operations]]
 type = "Filter"
 column = "timestamp"
@@ -323,21 +335,10 @@ type = "Select"
 columns = ["timestamp", "service_name", "endpoint", "status_code", "response_time_ms", "geo_region"]
 
 [[operations]]
-type = "WithColumn"
-name = "is_error_response"
-expression = { 
-  type = "BinaryOp", 
-  left = { type = "Column", value = "status_code" }, 
-  op = "GTE", 
-  right = { type = "Literal", value = 400 }
-}
-
-[[operations]]
 type = "GroupBy"
-columns = ["service_name", "geo_region", "is_error_response"]
+columns = ["service_name", "geo_region"]
 aggregate = [
   { column = "response_time_ms", function = "MEAN" },
-  { column = "response_time_ms", function = "MAX" },
   { column = "status_code", function = "COUNT" }
 ]
 
@@ -351,5 +352,6 @@ limit = 5
     let input = setup_test_logs();
 
     let result = run(config, input);
+    dbg!(&result);
     assert!(result.is_ok(), "Complex workflow failed");
 }

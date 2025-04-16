@@ -64,7 +64,7 @@ pub enum Operation {
     },
 
     WithColumn {
-        name: String,
+        name: Option<String>,
         expression: Expression,
     },
 
@@ -131,129 +131,6 @@ pub struct WindowBound {
     pub following: Option<usize>,
 }
 
-// move to tryfrom
-impl Operation {
-    pub fn to_polars_expr(&self) -> Result<polars::prelude::Expr, String> {
-        match self {
-            Operation::GroupByTime {
-                time_column,
-                every,
-                unit,
-                output_column,
-                additional_groups,
-                aggregate,
-            } => {
-                // Create time bucket column
-                let expr = col(time_column);
-                let truncate = match unit {
-                    TimeUnit::Seconds => lit(format!("{every}s")),
-                    TimeUnit::Minutes => lit(format!("{every}m")),
-                    TimeUnit::Hours => lit(format!("{every}h")),
-                    TimeUnit::Days => lit(format!("{every}d")),
-                    TimeUnit::Weeks => lit(format!("{every}w")),
-                    TimeUnit::Months => todo!(),
-                    TimeUnit::Quarters => todo!(),
-                    TimeUnit::Years => lit(format!("{every}y")),
-                };
-                Ok(expr.dt().truncate(truncate))
-            }
-            Operation::Select { .. } => {
-                unreachable!("Select operation should be handled in the main function")
-            }
-            Operation::Window {
-                column,
-                function,
-                partition_by,
-                order_by,
-                descending,
-                bounds,
-                name,
-            } => {
-                let mut ordering = Vec::new();
-                for (i, col_name) in order_by.iter().enumerate() {
-                    let is_desc = if i < descending.len() {
-                        descending[i]
-                    } else {
-                        false
-                    };
-                    let sort_opt = SortOptions {
-                        descending: is_desc,
-                        nulls_last: false,
-                        ..Default::default()
-                    };
-                    ordering.push(col(col_name).sort(sort_opt));
-                }
-
-                let partition_exprs: Vec<Expr> = partition_by.iter().map(col).collect();
-                // Configure window function with appropriate options
-                let window_expr = match function {
-                    WindowFunction::Sum => col(column).sum().over(partition_exprs.clone()),
-                    WindowFunction::Min => col(column).min().over(partition_exprs.clone()),
-                    WindowFunction::Max => col(column).max().over(partition_exprs.clone()),
-                    WindowFunction::Mean => col(column).mean().over(partition_exprs.clone()),
-                    WindowFunction::Count => col(column).count().over(partition_exprs.clone()),
-                    WindowFunction::First => col(column).first().over(partition_exprs.clone()),
-                    WindowFunction::Last => col(column).last().over(partition_exprs.clone()),
-                    WindowFunction::CumSum => {
-                        col(column).cum_sum(false).over(partition_exprs.clone())
-                    }
-                    WindowFunction::Lag {
-                        offset,
-                        default_value,
-                    } => {
-                        let mut expr = col(column).shift(lit(*offset));
-                        if let Some(default) = default_value {
-                            expr = expr.fill_null(lit_to_expr(default));
-                        }
-                        expr.over(partition_exprs.clone())
-                    }
-                    WindowFunction::Lead {
-                        offset,
-                        default_value,
-                    } => {
-                        let mut expr = col(column).shift(lit(*offset));
-                        if let Some(default) = default_value {
-                            expr = expr.fill_null(lit_to_expr(default));
-                        }
-                        expr.over(partition_exprs.clone())
-                    }
-                    WindowFunction::Rank => todo!(),
-                    WindowFunction::DenseRank => todo!(),
-                    WindowFunction::RowNumber => todo!(),
-                    WindowFunction::CumMin => todo!(),
-                    WindowFunction::CumMax => todo!(),
-                };
-
-                Ok(window_expr)
-            }
-
-            Operation::Filter {
-                column,
-                condition,
-                filter,
-            } => {
-                let col = col(column);
-                let filter_expr = match filter {
-                    Some(filter) => Ok(filter.to_polars_expr()?),
-                    None => Err("Filter expression is missing".to_string()),
-                };
-                match condition {
-                    AllowedFilterCondition::EQ => Ok(col.eq(filter_expr?)),
-                    AllowedFilterCondition::EQMISSING => Ok(col.eq_missing(filter_expr?)),
-                    AllowedFilterCondition::NEQ => Ok(col.neq(filter_expr?)),
-                    AllowedFilterCondition::LT => Ok(col.lt(filter_expr?)),
-                    AllowedFilterCondition::LTE => Ok(col.lt_eq(filter_expr?)),
-                    AllowedFilterCondition::GT => Ok(col.gt(filter_expr?)),
-                    AllowedFilterCondition::GTE => Ok(col.gt_eq(filter_expr?)),
-                    AllowedFilterCondition::ISNULL => Ok(col.is_null()),
-                    AllowedFilterCondition::ISNOTNULL => Ok(col.is_not_null()),
-                }
-            }
-            _ => Err("Unsupported operation".to_string()),
-        }
-    }
-}
-
 #[derive(Deserialize, Debug, Clone)]
 pub struct ColumnRename {
     pub old_name: String,
@@ -272,45 +149,49 @@ pub enum FilterField {
     Date(chrono::NaiveDate),
     DateTime(chrono::DateTime<chrono::Utc>),
 }
-impl FilterField {
-    pub fn to_polars_expr(&self) -> Result<polars::prelude::Expr, String> {
-        match self {
-            FilterField::SingleNumber(value) => Ok(lit(*value)),
-            //FilterField::NumberList(values) => Ok(lit(values.clone())),
-            FilterField::SingleString(value) => Ok(lit(value.clone())),
-            //FilterField::StringList(values) => Ok(lit(values.clone())),
-            FilterField::SingleFloat(value) => Ok(lit(*value)),
-            //FilterField::FloatList(values) => Ok(lit(values.clone())),
-            FilterField::Boolean(value) => Ok(lit(*value)),
-            FilterField::Date(date) => Ok(lit(*date)),
-            //FilterField::DateTime(date_time) => Ok(lit(*date_time)),
-            _ => Err("Unsupported filter field type".to_string()),
-        }
-    }
+
+#[derive(Deserialize, Debug)]
+pub enum TimeUnit {
+    Seconds,
+    Minutes,
+    Hours,
+    Days,
+    Weeks,
+    Months,
+    Quarters,
+    Years,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+#[serde(untagged)]
+pub enum LiteralValue {
+    String(String),
+    Integer(i64),
+    Float(f64),
+    Boolean(bool),
+    Null,
+    Date(chrono::NaiveDate),
+    DateTime(chrono::DateTime<chrono::Utc>),
+    StringList(Vec<String>),
+    IntegerList(Vec<i64>),
+    FloatList(Vec<f64>),
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub enum JoinType {
+    Inner,
+    Left,
+    Right,
+    Outer,
+    Cross,
+    Semi,
+    Anti,
 }
 
 #[derive(Deserialize, Debug)]
 pub struct Aggregate {
     pub column: String,
     pub function: AllowedGroupFunction,
-}
-impl Aggregate {
-    pub fn to_polars_expr(&self) -> Result<polars::prelude::Expr, String> {
-        let col = col(&self.column);
-        match self.function {
-            AllowedGroupFunction::MIN => Ok(col.min()),
-            AllowedGroupFunction::MAX => Ok(col.max()),
-            AllowedGroupFunction::SUM => Ok(col.sum()),
-            AllowedGroupFunction::MEAN => Ok(col.mean()),
-            AllowedGroupFunction::MEDIAN => Ok(col.median()),
-            AllowedGroupFunction::STD(ddof) => Ok(col.std(ddof)),
-            AllowedGroupFunction::VAR(ddof) => Ok(col.var(ddof)),
-            AllowedGroupFunction::COUNT => Ok(col.count()),
-            AllowedGroupFunction::FIRST => Ok(col.first()),
-            AllowedGroupFunction::LAST => Ok(col.last()),
-            AllowedGroupFunction::NUNIQUE => Ok(col.n_unique()),
-        }
-    }
 }
 
 #[derive(Deserialize, Debug)]
@@ -331,8 +212,12 @@ pub enum AllowedGroupFunction {
 #[derive(Deserialize, Debug)]
 #[serde(tag = "type")]
 pub enum Expression {
-    Column(String),
-    Literal(LiteralValue),
+    Column {
+        value: String,
+    },
+    Literal {
+        value: LiteralValue,
+    },
     BinaryOp {
         left: Box<Expression>,
         op: ExpressionOperation,
@@ -375,12 +260,49 @@ pub enum ExpressionOperation {
     GT,
     GTE,
 }
+
+impl Aggregate {
+    pub fn to_polars_expr(&self) -> Result<polars::prelude::Expr, String> {
+        let col = col(&self.column);
+        match self.function {
+            AllowedGroupFunction::MIN => Ok(col.min()),
+            AllowedGroupFunction::MAX => Ok(col.max()),
+            AllowedGroupFunction::SUM => Ok(col.sum()),
+            AllowedGroupFunction::MEAN => Ok(col.mean()),
+            AllowedGroupFunction::MEDIAN => Ok(col.median()),
+            AllowedGroupFunction::STD(ddof) => Ok(col.std(ddof)),
+            AllowedGroupFunction::VAR(ddof) => Ok(col.var(ddof)),
+            AllowedGroupFunction::COUNT => Ok(col.count()),
+            AllowedGroupFunction::FIRST => Ok(col.first()),
+            AllowedGroupFunction::LAST => Ok(col.last()),
+            AllowedGroupFunction::NUNIQUE => Ok(col.n_unique()),
+        }
+    }
+}
+
+impl FilterField {
+    pub fn to_polars_expr(&self) -> Result<polars::prelude::Expr, String> {
+        match self {
+            FilterField::SingleNumber(value) => Ok(lit(*value)),
+            //FilterField::NumberList(values) => Ok(lit(values.clone())),
+            FilterField::SingleString(value) => Ok(lit(value.clone())),
+            //FilterField::StringList(values) => Ok(lit(values.clone())),
+            FilterField::SingleFloat(value) => Ok(lit(*value)),
+            //FilterField::FloatList(values) => Ok(lit(values.clone())),
+            FilterField::Boolean(value) => Ok(lit(*value)),
+            FilterField::Date(date) => Ok(lit(*date)),
+            //FilterField::DateTime(date_time) => Ok(lit(*date_time)),
+            _ => Err("Unsupported filter field type".to_string()),
+        }
+    }
+}
+
 impl Expression {
     pub fn to_polars_expr(&self) -> Result<polars::prelude::Expr, String> {
         match self {
-            Expression::Column(value) => Ok(col(value)),
+            Expression::Column { value } => Ok(col(value)),
 
-            Expression::Literal(value) => match value {
+            Expression::Literal { value } => match value {
                 LiteralValue::String(s) => Ok(lit(s.clone())),
                 LiteralValue::Integer(i) => Ok(lit(*i)),
                 LiteralValue::Float(f) => Ok(lit(*f)),
@@ -520,44 +442,6 @@ impl Expression {
         }
     }
 }
-
-#[derive(Deserialize, Debug)]
-pub enum TimeUnit {
-    Seconds,
-    Minutes,
-    Hours,
-    Days,
-    Weeks,
-    Months,
-    Quarters,
-    Years,
-}
-
-#[derive(Deserialize, Debug, Clone)]
-#[serde(untagged)]
-pub enum LiteralValue {
-    String(String),
-    Integer(i64),
-    Float(f64),
-    Boolean(bool),
-    Null,
-    Date(chrono::NaiveDate),
-    DateTime(chrono::DateTime<chrono::Utc>),
-    StringList(Vec<String>),
-    IntegerList(Vec<i64>),
-    FloatList(Vec<f64>),
-}
-
-#[derive(Deserialize, Debug, Clone)]
-pub enum JoinType {
-    Inner,
-    Left,
-    Right,
-    Outer,
-    Cross,
-    Semi,
-    Anti,
-}
 fn lit_to_expr(value: &LiteralValue) -> Expr {
     match value {
         LiteralValue::String(s) => lit(s.clone()),
@@ -570,5 +454,128 @@ fn lit_to_expr(value: &LiteralValue) -> Expr {
         LiteralValue::StringList(items) => todo!(),
         LiteralValue::IntegerList(items) => todo!(),
         LiteralValue::FloatList(items) => todo!(),
+    }
+}
+
+// move to tryfrom
+impl Operation {
+    pub fn to_polars_expr(&self) -> Result<polars::prelude::Expr, String> {
+        match self {
+            Operation::GroupByTime {
+                time_column,
+                every,
+                unit,
+                output_column,
+                additional_groups,
+                aggregate,
+            } => {
+                // Create time bucket column
+                let expr = col(time_column);
+                let truncate = match unit {
+                    TimeUnit::Seconds => lit(format!("{every}s")),
+                    TimeUnit::Minutes => lit(format!("{every}m")),
+                    TimeUnit::Hours => lit(format!("{every}h")),
+                    TimeUnit::Days => lit(format!("{every}d")),
+                    TimeUnit::Weeks => lit(format!("{every}w")),
+                    TimeUnit::Months => todo!(),
+                    TimeUnit::Quarters => todo!(),
+                    TimeUnit::Years => lit(format!("{every}y")),
+                };
+                Ok(expr.dt().truncate(truncate))
+            }
+            Operation::Select { .. } => {
+                unreachable!("Select operation should be handled in the main function")
+            }
+            Operation::Window {
+                column,
+                function,
+                partition_by,
+                order_by,
+                descending,
+                bounds,
+                name,
+            } => {
+                let mut ordering = Vec::new();
+                for (i, col_name) in order_by.iter().enumerate() {
+                    let is_desc = if i < descending.len() {
+                        descending[i]
+                    } else {
+                        false
+                    };
+                    let sort_opt = SortOptions {
+                        descending: is_desc,
+                        nulls_last: false,
+                        ..Default::default()
+                    };
+                    ordering.push(col(col_name).sort(sort_opt));
+                }
+
+                let partition_exprs: Vec<Expr> = partition_by.iter().map(col).collect();
+                // Configure window function with appropriate options
+                let window_expr = match function {
+                    WindowFunction::Sum => col(column).sum().over(partition_exprs.clone()),
+                    WindowFunction::Min => col(column).min().over(partition_exprs.clone()),
+                    WindowFunction::Max => col(column).max().over(partition_exprs.clone()),
+                    WindowFunction::Mean => col(column).mean().over(partition_exprs.clone()),
+                    WindowFunction::Count => col(column).count().over(partition_exprs.clone()),
+                    WindowFunction::First => col(column).first().over(partition_exprs.clone()),
+                    WindowFunction::Last => col(column).last().over(partition_exprs.clone()),
+                    WindowFunction::CumSum => {
+                        col(column).cum_sum(false).over(partition_exprs.clone())
+                    }
+                    WindowFunction::Lag {
+                        offset,
+                        default_value,
+                    } => {
+                        let mut expr = col(column).shift(lit(*offset));
+                        if let Some(default) = default_value {
+                            expr = expr.fill_null(lit_to_expr(default));
+                        }
+                        expr.over(partition_exprs.clone())
+                    }
+                    WindowFunction::Lead {
+                        offset,
+                        default_value,
+                    } => {
+                        let mut expr = col(column).shift(lit(*offset));
+                        if let Some(default) = default_value {
+                            expr = expr.fill_null(lit_to_expr(default));
+                        }
+                        expr.over(partition_exprs.clone())
+                    }
+                    WindowFunction::Rank => todo!(),
+                    WindowFunction::DenseRank => todo!(),
+                    WindowFunction::RowNumber => todo!(),
+                    WindowFunction::CumMin => todo!(),
+                    WindowFunction::CumMax => todo!(),
+                };
+
+                Ok(window_expr)
+            }
+
+            Operation::Filter {
+                column,
+                condition,
+                filter,
+            } => {
+                let col = col(column);
+                let filter_expr = match filter {
+                    Some(filter) => Ok(filter.to_polars_expr()?),
+                    None => Err("Filter expression is missing".to_string()),
+                };
+                match condition {
+                    AllowedFilterCondition::EQ => Ok(col.eq(filter_expr?)),
+                    AllowedFilterCondition::EQMISSING => Ok(col.eq_missing(filter_expr?)),
+                    AllowedFilterCondition::NEQ => Ok(col.neq(filter_expr?)),
+                    AllowedFilterCondition::LT => Ok(col.lt(filter_expr?)),
+                    AllowedFilterCondition::LTE => Ok(col.lt_eq(filter_expr?)),
+                    AllowedFilterCondition::GT => Ok(col.gt(filter_expr?)),
+                    AllowedFilterCondition::GTE => Ok(col.gt_eq(filter_expr?)),
+                    AllowedFilterCondition::ISNULL => Ok(col.is_null()),
+                    AllowedFilterCondition::ISNOTNULL => Ok(col.is_not_null()),
+                }
+            }
+            _ => Err("Unsupported operation".to_string()),
+        }
     }
 }

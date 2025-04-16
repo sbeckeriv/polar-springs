@@ -70,15 +70,24 @@ fn operations(df: LazyFrame, config: &Config) -> Result<LazyFrame, Box<dyn std::
                 order,
                 limit,
             } => {
-                info!("Sorting by column '{}' in '{}' order", column, order);
+                dbg!(limit);
+                info!(
+                    "Sorting by column '{}' in '{}' order {:?}",
+                    column, order, limit
+                );
                 let reverse = order.to_lowercase() == "desc";
                 let sort_options = polars::prelude::SortMultipleOptions {
                     descending: [reverse].into(),
-                    nulls_last: [false].into(),
+                    nulls_last: [true].into(),
                     limit: *limit,
                     maintain_order: true,
                     multithreaded: true,
                 };
+
+                info!(
+                    "Sorting by column '{}' in '{}' order {:?}  {:?}",
+                    column, order, limit, sort_options
+                );
                 df = df.sort([column], sort_options);
             }
             config::Operation::GroupByDynamic { columns, aggregate } => todo!(),
@@ -89,7 +98,11 @@ fn operations(df: LazyFrame, config: &Config) -> Result<LazyFrame, Box<dyn std::
                 how,
             } => todo!(),
             config::Operation::WithColumn { name, expression } => {
-                df = df.with_column(expression.to_polars_expr()?);
+                let mut expression = expression.to_polars_expr()?;
+                if let Some(name) = name {
+                    expression = expression.alias(name);
+                }
+                df = df.with_column(expression);
             }
             config::Operation::Pivot {
                 index,
@@ -99,7 +112,15 @@ fn operations(df: LazyFrame, config: &Config) -> Result<LazyFrame, Box<dyn std::
             } => {
                 // how do i use pivot?
             }
-            config::Operation::Rename { mappings } => todo!(),
+            config::Operation::Rename { mappings } => {
+                let mut rename_old = Vec::new();
+                let mut rename_new = Vec::new();
+                for mapping in mappings {
+                    rename_old.push(&mapping.old_name);
+                    rename_new.push(&mapping.new_name);
+                }
+                df = df.rename(rename_old, rename_new, false);
+            }
             config::Operation::PivotAdvanced { index, values, .. } => {
                 // Create a dictionary of value column -> aggregation function
                 let mut agg_exprs: Vec<Expr> = Vec::new();
