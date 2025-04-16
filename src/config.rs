@@ -1,4 +1,4 @@
-use polars::prelude::{col, lit, when, DataType, Expr, SortOptions, NULL};
+use polars::prelude::{abs, col, lit, when, DataType, Expr, SortOptions, NULL};
 use serde::Deserialize;
 
 #[derive(Deserialize, Debug)]
@@ -355,6 +355,7 @@ impl Expression {
                 match name {
                     // String functions
                     ExpressionFunction::CONCAT => {
+                        todo!("concat");
                         if polars_args.is_empty() {
                             return Err(
                                 "concat function requires at least one argument".to_string()
@@ -367,12 +368,14 @@ impl Expression {
                         Ok(result)
                     }
                     ExpressionFunction::LOWER => {
+                        todo!("lower");
                         if polars_args.len() != 1 {
                             return Err("lower function requires exactly one argument".to_string());
                         }
                         Ok(lit(polars_args[0].to_string().to_lowercase()))
                     }
                     ExpressionFunction::UPPER => {
+                        todo!("upper");
                         if polars_args.len() != 1 {
                             return Err("upper function requires exactly one argument".to_string());
                         }
@@ -387,33 +390,38 @@ impl Expression {
                             );
                         }
                         todo!();
-                        // Assuming first arg is the part name (as a literal) and second is the timestamp
-                        /*
-                                               if let Expression::Literal {
-                                                   value: LiteralValue::String(part),
-                                               } = &args[0]
-                                               {
-                                                   Ok(polars_args[1].dt().dt_part(part))
-                                               } else {
-                                                   Err("date_part first argument must be a string literal".to_string())
-                                               }
-                        */
                     }
 
                     // Math functions
                     ExpressionFunction::ABS => {
-                        if polars_args.len() != 1 {
+                        if args.len() > 1 {
                             return Err("abs function requires exactly one argument".to_string());
                         }
-                        todo!();
-                        //Ok(polars_args[0].abs())
+                        if let Some(Expression::Column { value: arg }) = args.first() {
+                            Ok(col(arg).abs())
+                        } else {
+                            Err("abs function requires one column expression argument".to_string())
+                        }
                     }
                     ExpressionFunction::ROUND => {
                         if polars_args.len() != 2 {
                             return Err("round function requires exactly two arguments".to_string());
                         }
-                        todo!();
 
+                        if let (
+                            Some(Expression::Column { value: arg }),
+                            Some(Expression::Literal {
+                                value: LiteralValue::Integer(num),
+                            }),
+                        ) = (args.first(), args.iter().nth(1))
+                        {
+                            let num = u32::try_from(*num).map_err(|_| {
+                                "round second argument must be a positive integer".to_string()
+                            })?;
+                            Ok(col(arg).round(num))
+                        } else {
+                            Err("round function requires two args column expression argument, and literal integer".to_string())
+                        }
                         /*
                         // Second arg should be the number of decimal places
                         if let Expression::Literal {

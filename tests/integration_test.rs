@@ -194,22 +194,22 @@ fn test_with_column_function() {
 [[operations]]
 type = "WithColumn"
 name = "total_processing_time"
-expression = { 
-  type = "BinaryOp", 
-  left = { type = "Column", value = "response_time_ms" }, 
-  op = "ADD", 
-  right = { 
-    type = "Function", 
-    name = "ABS", 
-    args = [{ type = "Column", value = "external_call_time_ms" }]
-  }
-}
+expression = { type = "BinaryOp", left = { type = "Column", value = "response_time_ms" }, op = "ADD", right = { type = "Function", name = "ABS", args = [{ type = "Column", value = "external_call_time_ms" }] } }
+
+[[operations]]
+type = "Select"
+columns = ["timestamp", "total_processing_time",  "endpoint", "status_code", "response_time_ms", "external_call_time_ms"]
+
 "#,
     );
     let input = setup_test_logs();
 
     let result = run(config, input);
-    assert!(result.is_ok(), "WithColumn function failed");
+    assert!(
+        result.is_ok(),
+        "WithColumn function failed {}",
+        result.err().unwrap().to_string()
+    );
 }
 
 #[test]
