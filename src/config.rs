@@ -47,6 +47,12 @@ pub enum Operation {
         #[serde(default)]
         output_column: Option<String>, // Name for the resulting time bucket column
         #[serde(default)]
+        timestamp_format: Option<String>,
+        #[serde(default)]
+        timestamp_timezone: Option<String>, // default UTC
+        #[serde(default)]
+        precision: Option<TimeUnitPrecision>,
+        #[serde(default)]
         additional_groups: Vec<String>, // Additional columns to group by
         aggregate: Vec<Aggregate>,
     },
@@ -151,6 +157,13 @@ pub enum FilterField {
 }
 
 #[derive(Deserialize, Debug)]
+pub enum TimeUnitPrecision {
+    Nanoseconds,
+    Microseconds,
+    Milliseconds,
+}
+
+#[derive(Deserialize, Debug)]
 pub enum TimeUnit {
     Seconds,
     Minutes,
@@ -235,13 +248,76 @@ pub enum Expression {
 
 #[derive(Deserialize, Debug)]
 pub enum ExpressionFunction {
-    CONCAT { column1: String, column2: String },
-    LOWER { column: String },
-    UPPER { column: String },
+    CONCAT {
+        column1: String,
+        column2: String,
+    },
+    LOWER {
+        column: String,
+    },
+    UPPER {
+        column: String,
+    },
     DATEPART,
-    ABS { column: String },
-    ROUND { column: String, num: u32 },
-    TOINT { size: u8, column: String },
+    ABS {
+        column: String,
+    },
+    ROUND {
+        column: String,
+        num: u32,
+    },
+    TOINT {
+        size: u8,
+        column: String,
+    },
+    TRIM {
+        column: String,
+        chars: String,
+    },
+    REPLACE {
+        column: String,
+        pattern: String,
+        replacement: String,
+        literal: bool,
+    },
+    SUBSTRING {
+        column: String,
+        start: u32,
+        length: u32,
+    },
+    ISNULL {
+        column: String,
+    },
+    ISNOTNULL {
+        column: String,
+    },
+    YEAR {
+        column: String,
+    },
+    MONTH {
+        column: String,
+    },
+    DAY {
+        column: String,
+    },
+    HOUR {
+        column: String,
+    },
+    MINUTE {
+        column: String,
+    },
+    SECOND {
+        column: String,
+    },
+    FLOOR {
+        column: String,
+    },
+    CEIL {
+        column: String,
+    },
+    SQRT {
+        column: String,
+    },
 }
 #[derive(Deserialize, Debug)]
 pub enum ExpressionOperation {
@@ -369,6 +445,48 @@ impl Expression {
                             _ => Err("Invalid size for toint function".to_string()),
                         }
                     }
+                    ExpressionFunction::TRIM { column, chars } => {
+                        // confirm how this works
+                        Ok(col(column).str().strip_chars(lit(chars.clone())))
+                    }
+                    ExpressionFunction::REPLACE {
+                        column,
+                        pattern,
+                        replacement,
+                        literal,
+                    } => Ok(col(column).str().replace_all(
+                        lit(pattern.clone()),
+                        lit(replacement.clone()),
+                        *literal,
+                    )),
+                    ExpressionFunction::SUBSTRING {
+                        column,
+                        start,
+                        length,
+                    } => Ok(col(column).str().slice(lit(*start), lit(*length))),
+                    ExpressionFunction::ISNULL { column } => Ok(col(column).is_null()),
+                    ExpressionFunction::ISNOTNULL { column } => Ok(col(column).is_not_null()),
+                    ExpressionFunction::YEAR { column } => {
+                        Ok(col(column).dt().year().cast(DataType::Int32))
+                    }
+                    ExpressionFunction::MONTH { column } => {
+                        Ok(col(column).dt().month().cast(DataType::Int32))
+                    }
+                    ExpressionFunction::DAY { column } => {
+                        Ok(col(column).dt().day().cast(DataType::Int32))
+                    }
+                    ExpressionFunction::HOUR { column } => {
+                        Ok(col(column).dt().hour().cast(DataType::Int32))
+                    }
+                    ExpressionFunction::MINUTE { column } => {
+                        Ok(col(column).dt().minute().cast(DataType::Int32))
+                    }
+                    ExpressionFunction::SECOND { column } => {
+                        Ok(col(column).dt().second().cast(DataType::Int32))
+                    }
+                    ExpressionFunction::FLOOR { column } => Ok(col(column).floor()),
+                    ExpressionFunction::CEIL { column } => Ok(col(column).ceil()),
+                    ExpressionFunction::SQRT { column } => Ok(col(column).sqrt()),
                 }
             }
 
@@ -408,23 +526,54 @@ impl Operation {
                 time_column,
                 every,
                 unit,
+                precision,
                 output_column,
+                timestamp_format,
+                timestamp_timezone,
                 additional_groups,
                 aggregate,
             } => {
                 // Create time bucket column
+                //2023-04-01T00:01:35-07:00
+                let precision = precision.as_ref().map(|f| match f {
+                    TimeUnitPrecision::Nanoseconds => polars::prelude::TimeUnit::Nanoseconds,
+                    TimeUnitPrecision::Microseconds => polars::prelude::TimeUnit::Microseconds,
+                    TimeUnitPrecision::Milliseconds => polars::prelude::TimeUnit::Milliseconds,
+                });
+                let format = timestamp_format
+                    .to_owned()
+                    .or_else(|| Some("%Y-%m-%d %H:%M:%S".to_string()))
+                    .map(|f| f.into());
+                let timezone = timestamp_timezone
+                    .as_ref()
+                    .map(|f| polars::prelude::TimeZone::from_string(f.into()));
                 let expr = col(time_column);
-                let truncate = match unit {
-                    TimeUnit::Seconds => lit(format!("{every}s")),
-                    TimeUnit::Minutes => lit(format!("{every}m")),
-                    TimeUnit::Hours => lit(format!("{every}h")),
-                    TimeUnit::Days => lit(format!("{every}d")),
-                    TimeUnit::Weeks => lit(format!("{every}w")),
-                    TimeUnit::Months => todo!(),
-                    TimeUnit::Quarters => todo!(),
-                    TimeUnit::Years => lit(format!("{every}y")),
+                let expr = expr.str().to_datetime(
+                    precision,
+                    timezone, // UTC timezone (or use your specific zone)
+                    polars::prelude::StrptimeOptions {
+                        format,        // Your datetime format
+                        strict: false, // Allow some flexibility in parsing
+                        exact: true,   // Require the entire string to match
+                        cache: true,   // Cache parsed patterns for performance
+                    },
+                    lit("infer"), // How to handle ambiguous dates (options: "raise", "infer", etc.)
+                );
+
+                let mut round_expr = match unit {
+                    TimeUnit::Seconds => expr.dt().round(lit(format!("{}s", every))),
+                    TimeUnit::Minutes => expr.dt().round(lit(format!("{}m", every))),
+                    TimeUnit::Hours => expr.dt().round(lit(format!("{}h", every))),
+                    TimeUnit::Days => expr.dt().round(lit(format!("{}d", every))),
+                    TimeUnit::Weeks => expr.dt().round(lit(format!("{}w", every))),
+                    TimeUnit::Months => expr.dt().round(lit(format!("{}mo", every))),
+                    TimeUnit::Quarters => expr.dt().round(lit(format!("{}q", every))),
+                    TimeUnit::Years => expr.dt().round(lit(format!("{}y", every))),
                 };
-                Ok(expr.dt().truncate(truncate))
+                if let Some(output_column) = output_column {
+                    round_expr = round_expr.alias(output_column);
+                }
+                Ok(round_expr)
             }
             Operation::Select { .. } => {
                 unreachable!("Select operation should be handled in the main function")

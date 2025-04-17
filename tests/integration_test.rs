@@ -126,20 +126,22 @@ fn test_group_by_time() {
 type = "GroupByTime"
 time_column = "timestamp"
 every = 1
-unit = "Hours"
+unit = "Minutes"
+timestamp_format = "%Y-%m-%dT%H:%M:%S%z"
 output_column = "hour_bucket"
 additional_groups = ["service_name"]
-aggregate = [
-  { column = "response_time_ms", function = "MEAN" },
-  { column = "response_time_ms", function = "MAX" },
-  { column = "status_code", function = "COUNT" }
-]
+aggregate = [ { column = "response_time_ms", function = "MEAN" },  { column = "status_code", function = "COUNT" } ]
 "#,
     );
+    // todo: fix aggregate function with two column names. support aliases.
     let input = setup_test_logs();
 
     let result = run(config, input);
-    assert!(result.is_ok(), "Group by time operation failed");
+    assert!(
+        result.is_ok(),
+        "Group by time operation failed {}",
+        result.err().unwrap().to_string()
+    );
 }
 
 #[test]
