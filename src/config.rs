@@ -225,7 +225,6 @@ pub enum Expression {
     },
     Function {
         name: ExpressionFunction,
-        args: Vec<Expression>,
     },
     Conditional {
         condition: Box<Expression>,
@@ -236,12 +235,13 @@ pub enum Expression {
 
 #[derive(Deserialize, Debug)]
 pub enum ExpressionFunction {
-    CONCAT,
-    LOWER,
-    UPPER,
+    CONCAT { column1: String, column2: String },
+    LOWER { column: String },
+    UPPER { column: String },
     DATEPART,
-    ABS,
-    ROUND,
+    ABS { column: String },
+    ROUND { column: String, num: u32 },
+    TOINT { size: u8, column: String },
 }
 #[derive(Deserialize, Debug)]
 pub enum ExpressionOperation {
@@ -346,93 +346,28 @@ impl Expression {
                 }
             }
 
-            Expression::Function { name, args } => {
-                // Convert all arguments to Polars expressions
-                let polars_args: Result<Vec<polars::prelude::Expr>, String> =
-                    args.iter().map(|arg| arg.to_polars_expr()).collect();
-                let polars_args = polars_args?;
-
+            Expression::Function { name } => {
                 match name {
-                    // String functions
-                    ExpressionFunction::CONCAT => {
+                    ExpressionFunction::CONCAT { column1, column2 } => {
                         todo!("concat");
-                        if polars_args.is_empty() {
-                            return Err(
-                                "concat function requires at least one argument".to_string()
-                            );
-                        }
-                        let mut result = polars_args[0].clone();
-                        for arg in &polars_args[1..] {
-                            result = result + arg.clone();
-                        }
-                        Ok(result)
                     }
-                    ExpressionFunction::LOWER => {
-                        todo!("lower");
-                        if polars_args.len() != 1 {
-                            return Err("lower function requires exactly one argument".to_string());
-                        }
-                        Ok(lit(polars_args[0].to_string().to_lowercase()))
-                    }
-                    ExpressionFunction::UPPER => {
-                        todo!("upper");
-                        if polars_args.len() != 1 {
-                            return Err("upper function requires exactly one argument".to_string());
-                        }
-                        Ok(lit(polars_args[0].to_string().to_uppercase()))
-                    }
-
-                    // Date functions
+                    ExpressionFunction::LOWER { column } => Ok(col(column).str().to_lowercase()),
+                    ExpressionFunction::UPPER { column } => Ok(col(column).str().to_uppercase()),
                     ExpressionFunction::DATEPART => {
-                        if polars_args.len() != 2 {
-                            return Err(
-                                "date_part function requires exactly two arguments".to_string()
-                            );
-                        }
+                        //https://docs.rs/polars/latest/polars/prelude/enum.TemporalFunction.html
                         todo!();
                     }
-
-                    // Math functions
-                    ExpressionFunction::ABS => {
-                        if args.len() > 1 {
-                            return Err("abs function requires exactly one argument".to_string());
+                    ExpressionFunction::ABS { column } => Ok(col(column).abs()),
+                    ExpressionFunction::ROUND { column, num } => Ok(col(column).round(*num)),
+                    ExpressionFunction::TOINT { size, column } => {
+                        let col = col(column);
+                        match size {
+                            8 => Ok(col.cast(DataType::Int8)),
+                            16 => Ok(col.cast(DataType::Int16)),
+                            32 => Ok(col.cast(DataType::Int32)),
+                            64 => Ok(col.cast(DataType::Int64)),
+                            _ => Err("Invalid size for toint function".to_string()),
                         }
-                        if let Some(Expression::Column { value: arg }) = args.first() {
-                            Ok(col(arg).abs())
-                        } else {
-                            Err("abs function requires one column expression argument".to_string())
-                        }
-                    }
-                    ExpressionFunction::ROUND => {
-                        if polars_args.len() != 2 {
-                            return Err("round function requires exactly two arguments".to_string());
-                        }
-
-                        if let (
-                            Some(Expression::Column { value: arg }),
-                            Some(Expression::Literal {
-                                value: LiteralValue::Integer(num),
-                            }),
-                        ) = (args.first(), args.iter().nth(1))
-                        {
-                            let num = u32::try_from(*num).map_err(|_| {
-                                "round second argument must be a positive integer".to_string()
-                            })?;
-                            Ok(col(arg).round(num))
-                        } else {
-                            Err("round function requires two args column expression argument, and literal integer".to_string())
-                        }
-                        /*
-                        // Second arg should be the number of decimal places
-                        if let Expression::Literal {
-                            value: LiteralValue::Integer(decimals),
-                        } = &args[1]
-                        {
-                            Ok(polars_args[0].round(*decimals as u32))
-                        } else {
-                            Err("round second argument must be an integer literal".to_string())
-                        }
-                        */
                     }
                 }
             }

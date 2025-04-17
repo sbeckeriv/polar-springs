@@ -194,7 +194,7 @@ fn test_with_column_function() {
 [[operations]]
 type = "WithColumn"
 name = "total_processing_time"
-expression = { type = "BinaryOp", left = { type = "Column", value = "response_time_ms" }, op = "ADD", right = { type = "Function", name = "ABS", args = [{ type = "Column", value = "external_call_time_ms" }] } }
+expression = { type = "BinaryOp", left = { type = "Column", value = "response_time_ms" }, op = "ADD", right = { type = "Function", name = { ABS = { column = "external_call_time_ms" } } }} 
 
 [[operations]]
 type = "Select"
