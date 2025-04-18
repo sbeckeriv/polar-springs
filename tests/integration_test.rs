@@ -140,7 +140,7 @@ aggregate = [ { column = "response_time_ms", function = "MEAN" },  { column = "s
     assert!(
         result.is_ok(),
         "Group by time operation failed {}",
-        result.err().unwrap().to_string()
+        result.err().unwrap()
     );
 }
 
@@ -184,7 +184,7 @@ columns = ["timestamp", "is_slow_response",  "endpoint", "status_code", "respons
     assert!(
         result.is_ok(),
         "WithColumn binary op failed {}",
-        result.err().unwrap().to_string()
+        result.err().unwrap()
     );
 }
 
@@ -210,7 +210,7 @@ columns = ["timestamp", "total_processing_time",  "endpoint", "status_code", "re
     assert!(
         result.is_ok(),
         "WithColumn function failed {}",
-        result.err().unwrap().to_string()
+        result.err().unwrap()
     );
 }
 
@@ -276,7 +276,7 @@ type = "cumsum"
     assert!(
         result.is_ok(),
         "Window CumSum operation failed {}",
-        result.err().unwrap().to_string()
+        result.err().unwrap()
     );
 }
 
@@ -315,7 +315,7 @@ columns = ["timestamp", "service_name", "endpoint", "status_code", "response_tim
     assert!(
         result.is_ok(),
         "Window Lag operation failed {}",
-        result.err().unwrap().to_string()
+        result.err().unwrap()
     );
 }
 
