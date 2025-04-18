@@ -1,4 +1,4 @@
-use polars::prelude::{abs, col, lit, when, DataType, Expr, SortOptions, NULL};
+use polars::prelude::{abs, col, cum_min, lit, when, DataType, Expr, SortOptions, NULL};
 use serde::Deserialize;
 
 #[derive(Deserialize, Debug)]
@@ -118,8 +118,6 @@ pub enum WindowFunction {
     DenseRank,
     RowNumber,
     CumSum,
-    CumMin,
-    CumMax,
     Lag {
         offset: u32,
         default_value: Option<LiteralValue>,
@@ -250,10 +248,6 @@ pub enum Expression {
 
 #[derive(Deserialize, Debug)]
 pub enum ExpressionFunction {
-    CONCAT {
-        column1: String,
-        column2: String,
-    },
     LOWER {
         column: String,
     },
@@ -393,8 +387,14 @@ impl Expression {
                 LiteralValue::Float(f) => Ok(lit(*f)),
                 LiteralValue::Boolean(b) => Ok(lit(*b)),
                 LiteralValue::Null => Ok(lit(NULL)),
-                LiteralValue::Date(naive_date) => todo!(),
-                LiteralValue::DateTime(date_time) => todo!(),
+                LiteralValue::Date(naive_date) => Ok(lit(naive_date.and_hms_opt(0, 0, 0).unwrap())
+                    .cast(polars::prelude::DataType::Date)),
+                LiteralValue::DateTime(date_time) => Ok(lit(date_time.timestamp_millis()).cast(
+                    polars::prelude::DataType::Datetime(
+                        polars::prelude::TimeUnit::Milliseconds,
+                        None,
+                    ),
+                )),
                 LiteralValue::StringList(items) => todo!(),
                 LiteralValue::IntegerList(items) => todo!(),
                 LiteralValue::FloatList(items) => todo!(),
@@ -433,14 +433,11 @@ impl Expression {
 
             Expression::Function { name } => {
                 match name {
-                    ExpressionFunction::CONCAT { column1, column2 } => {
-                        todo!("concat");
-                    }
                     ExpressionFunction::LOWER { column } => Ok(col(column).str().to_lowercase()),
                     ExpressionFunction::UPPER { column } => Ok(col(column).str().to_uppercase()),
                     ExpressionFunction::DATEPART => {
                         //https://docs.rs/polars/latest/polars/prelude/enum.TemporalFunction.html
-                        todo!();
+                        Ok(col("date").dt().year())
                     }
                     ExpressionFunction::ABS { column } => Ok(col(column).abs()),
                     ExpressionFunction::ROUND { column, num } => Ok(col(column).round(*num)),
@@ -519,8 +516,12 @@ fn lit_to_expr(value: &LiteralValue) -> Expr {
         LiteralValue::Float(f) => lit(*f),
         LiteralValue::Boolean(b) => lit(*b),
         LiteralValue::Null => lit(NULL),
-        LiteralValue::Date(naive_date) => todo!(),
-        LiteralValue::DateTime(date_time) => todo!(),
+        LiteralValue::Date(naive_date) => {
+            lit(naive_date.and_hms_opt(0, 0, 0).unwrap()).cast(polars::prelude::DataType::Date)
+        }
+        LiteralValue::DateTime(date_time) => lit(date_time.timestamp_millis()).cast(
+            polars::prelude::DataType::Datetime(polars::prelude::TimeUnit::Milliseconds, None),
+        ),
         LiteralValue::StringList(items) => todo!(),
         LiteralValue::IntegerList(items) => todo!(),
         LiteralValue::FloatList(items) => todo!(),
@@ -629,15 +630,31 @@ impl Operation {
                         }
                         expr.over(partition_exprs.clone())
                     }
-                    WindowFunction::Rank => todo!(),
-                    WindowFunction::DenseRank => todo!(),
-                    WindowFunction::RowNumber => todo!(),
-                    WindowFunction::CumMin => todo!(),
-                    WindowFunction::CumMax => todo!(),
+                    WindowFunction::Rank => {
+                        Expr::rank(col(column), polars::prelude::RankOptions::default(), None)
+                            .over(partition_exprs.clone())
+                    }
+                    WindowFunction::DenseRank => Expr::rank(
+                        col(column),
+                        polars::prelude::RankOptions {
+                            method: polars::prelude::RankMethod::Dense,
+                            ..Default::default()
+                        },
+                        None,
+                    )
+                    .over(partition_exprs.clone()),
+                    WindowFunction::RowNumber => Expr::rank(
+                        col(column),
+                        polars::prelude::RankOptions {
+                            method: polars::prelude::RankMethod::Ordinal,
+                            ..Default::default()
+                        },
+                        None,
+                    )
+                    .over(partition_exprs.clone()),
                 };
 
-                let mut window_expr = window_expr.alias(name);
-                Ok(window_expr)
+                Ok(window_expr.alias(name))
             }
 
             Operation::Filter {
