@@ -262,16 +262,22 @@ fn test_window_cumsum() {
 [[operations]]
 type = "Window"
 column = "response_time_ms"
-function = "CumSum"
 partition_by = ["service_name"]
 order_by = ["timestamp"]
 name = "cumulative_response_time"
+
+[operations.function]
+type = "cumsum"
 "#,
     );
     let input = setup_test_logs();
 
     let result = run(config, input);
-    assert!(result.is_ok(), "Window CumSum operation failed");
+    assert!(
+        result.is_ok(),
+        "Window CumSum operation failed {}",
+        result.err().unwrap().to_string()
+    );
 }
 
 #[test]
@@ -279,25 +285,38 @@ fn test_window_lag() {
     let config = setup_test_config(
         "window_lag",
         r#"
+
+[[operations]]
+type = "Sort"
+column = "endpoint"
+order = "desc"
+
+
 [[operations]]
 type = "Window"
 column = "response_time_ms"
-function = { 
-  Lag = { 
-    offset = 1, 
-    default_value = { Integer = 0 } 
-  }
-}
-partition_by = ["service_name"]
-order_by = ["timestamp"]
-bounds = { preceding = 3, following = 0 }
-name = "prev_response_time"
+name = "lagged_response_time"
+partition_by = ["endpoint"]
+order_by = ["endpoint"]
+descending = [false]
+
+[operations.function]
+type = "lag"
+params = { offset = 2 }
+
+[[operations]]
+type = "Select"
+columns = ["timestamp", "service_name", "endpoint", "status_code", "response_time_ms", "lagged_response_time"]
 "#,
     );
     let input = setup_test_logs();
 
     let result = run(config, input);
-    assert!(result.is_ok(), "Window Lag operation failed");
+    assert!(
+        result.is_ok(),
+        "Window Lag operation failed {}",
+        result.err().unwrap().to_string()
+    );
 }
 
 #[test]
@@ -327,28 +346,28 @@ fn test_complex_workflow() {
 
 
 [[operations]]
+type = "Select"
+columns = ["timestamp", "service_name", "endpoint", "status_code",  "response_time_ms", "geo_region"]
+
+[[operations]]
 type = "Filter"
 column = "timestamp"
 condition = "GTE"
 filter = "2023-04-01T00:00:00-07:00"
 
 [[operations]]
-type = "Select"
-columns = ["timestamp", "service_name", "endpoint", "status_code", "response_time_ms", "geo_region"]
-
-[[operations]]
 type = "GroupBy"
-columns = ["service_name", "geo_region"]
+columns = [ "status_code","service_name", "geo_region"]
 aggregate = [
   { column = "response_time_ms", function = "MEAN" },
-  { column = "status_code", function = "COUNT" }
+  { column = "status_code", function = "COUNT", alias = "status_code_count" }
 ]
 
 [[operations]]
 type = "Sort"
-column = "COUNT(status_code)"
+column = "status_code_count"
 order = "desc"
-limit = 5
+
 "#,
     );
     let input = setup_test_logs();

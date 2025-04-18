@@ -71,6 +71,7 @@ fn operations(df: LazyFrame, config: &Config) -> Result<LazyFrame, Box<dyn std::
                 limit,
             } => {
                 dbg!(limit);
+                // limit is not working..
                 info!(
                     "Sorting by column '{}' in '{}' order {:?}",
                     column, order, limit

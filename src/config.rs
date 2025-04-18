@@ -105,6 +105,7 @@ pub enum Operation {
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "lowercase")]
+#[serde(tag = "type", content = "params")]
 pub enum WindowFunction {
     Sum,
     Min,
@@ -204,6 +205,7 @@ pub enum JoinType {
 #[derive(Deserialize, Debug)]
 pub struct Aggregate {
     pub column: String,
+    pub alias: Option<String>,
     pub function: AllowedGroupFunction,
 }
 
@@ -340,19 +342,26 @@ pub enum ExpressionOperation {
 impl Aggregate {
     pub fn to_polars_expr(&self) -> Result<polars::prelude::Expr, String> {
         let col = col(&self.column);
-        match self.function {
-            AllowedGroupFunction::MIN => Ok(col.min()),
-            AllowedGroupFunction::MAX => Ok(col.max()),
-            AllowedGroupFunction::SUM => Ok(col.sum()),
-            AllowedGroupFunction::MEAN => Ok(col.mean()),
-            AllowedGroupFunction::MEDIAN => Ok(col.median()),
-            AllowedGroupFunction::STD(ddof) => Ok(col.std(ddof)),
-            AllowedGroupFunction::VAR(ddof) => Ok(col.var(ddof)),
-            AllowedGroupFunction::COUNT => Ok(col.count()),
-            AllowedGroupFunction::FIRST => Ok(col.first()),
-            AllowedGroupFunction::LAST => Ok(col.last()),
-            AllowedGroupFunction::NUNIQUE => Ok(col.n_unique()),
-        }
+
+        let col = if let Some(alias) = &self.alias {
+            col.alias(alias)
+        } else {
+            col
+        };
+        let col = match self.function {
+            AllowedGroupFunction::MIN => col.min(),
+            AllowedGroupFunction::MAX => col.max(),
+            AllowedGroupFunction::SUM => col.sum(),
+            AllowedGroupFunction::MEAN => col.mean(),
+            AllowedGroupFunction::MEDIAN => col.median(),
+            AllowedGroupFunction::STD(ddof) => col.std(ddof),
+            AllowedGroupFunction::VAR(ddof) => col.var(ddof),
+            AllowedGroupFunction::COUNT => col.count(),
+            AllowedGroupFunction::FIRST => col.first(),
+            AllowedGroupFunction::LAST => col.last(),
+            AllowedGroupFunction::NUNIQUE => col.n_unique(),
+        };
+        Ok(col)
     }
 }
 
@@ -587,21 +596,6 @@ impl Operation {
                 bounds,
                 name,
             } => {
-                let mut ordering = Vec::new();
-                for (i, col_name) in order_by.iter().enumerate() {
-                    let is_desc = if i < descending.len() {
-                        descending[i]
-                    } else {
-                        false
-                    };
-                    let sort_opt = SortOptions {
-                        descending: is_desc,
-                        nulls_last: false,
-                        ..Default::default()
-                    };
-                    ordering.push(col(col_name).sort(sort_opt));
-                }
-
                 let partition_exprs: Vec<Expr> = partition_by.iter().map(col).collect();
                 // Configure window function with appropriate options
                 let window_expr = match function {
@@ -642,6 +636,7 @@ impl Operation {
                     WindowFunction::CumMax => todo!(),
                 };
 
+                let mut window_expr = window_expr.alias(name);
                 Ok(window_expr)
             }
 
