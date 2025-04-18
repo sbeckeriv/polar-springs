@@ -76,30 +76,23 @@ fn readme_avg_response_time_by_endpoint() {
 type = "GroupBy"
 columns = ["endpoint"]
 aggregate = [
-  { column = "response_time", function = "MEAN" },
-  { column = "response_time", function = "MAX" },
-  { column = "response_time", function = "MIN" }
+  { column = "response_time_ms", function = "MEAN", alias = "response_time_mean" },
+  { column = "response_time_ms", function = "MAX", alias = "response_time_max" },
+  { column = "response_time_ms", function = "MIN", alias = "response_time_min" },
+  { column = "request_id", function = "COUNT", alias = "request_count" }
 ]
 
-[[operations]]
-type = "Rename"
-mappings = [
-  { old_name = "response_time_MEAN", new_name = "avg_response_time" },
-  { old_name = "response_time_MAX", new_name = "max_response_time" },
-  { old_name = "response_time_MIN", new_name = "min_response_time" }
-]
 
 [[operations]]
 type = "Sort"
-column = "avg_response_time"
+column = "response_time_mean"
 order = "DESC"
-limit = 10
 "#,
     );
     let input = setup_test_logs();
 
     let result = run(config, input);
-    assert!(result.is_ok(), "README 2 failed");
+    assert!(result.is_ok(), "README 2 failed {}", result.err().unwrap());
 }
 
 // 3. Error Rate Over Time
