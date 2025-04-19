@@ -337,11 +337,6 @@ impl Aggregate {
     pub fn to_polars_expr(&self) -> Result<polars::prelude::Expr, String> {
         let col = col(&self.column);
 
-        let col = if let Some(alias) = &self.alias {
-            col.alias(alias)
-        } else {
-            col
-        };
         let col = match self.function {
             AllowedGroupFunction::MIN => col.min(),
             AllowedGroupFunction::MAX => col.max(),
@@ -354,6 +349,12 @@ impl Aggregate {
             AllowedGroupFunction::FIRST => col.first(),
             AllowedGroupFunction::LAST => col.last(),
             AllowedGroupFunction::NUNIQUE => col.n_unique(),
+        };
+
+        let col = if let Some(alias) = &self.alias {
+            col.alias(alias)
+        } else {
+            col
         };
         Ok(col)
     }

@@ -70,8 +70,6 @@ fn operations(df: LazyFrame, config: &Config) -> Result<LazyFrame, Box<dyn std::
                 order,
                 limit,
             } => {
-                dbg!(limit);
-                // limit is not working..
                 info!(
                     "Sorting by column '{}' in '{}' order {:?}",
                     column, order, limit
@@ -80,7 +78,7 @@ fn operations(df: LazyFrame, config: &Config) -> Result<LazyFrame, Box<dyn std::
                 let sort_options = polars::prelude::SortMultipleOptions {
                     descending: [reverse].into(),
                     nulls_last: [true].into(),
-                    limit: *limit,
+                    limit: None, // limit here is a panic if set. apply limit after.
                     maintain_order: true,
                     multithreaded: true,
                 };
@@ -90,6 +88,9 @@ fn operations(df: LazyFrame, config: &Config) -> Result<LazyFrame, Box<dyn std::
                     column, order, limit, sort_options
                 );
                 df = df.sort([column], sort_options);
+                if let Some(limit) = limit {
+                    df = df.limit(*limit as u32);
+                }
             }
             config::Operation::GroupByDynamic { columns, aggregate } => todo!(),
             config::Operation::Join {

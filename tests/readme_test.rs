@@ -140,7 +140,7 @@ expression = {
     let input = setup_test_logs();
 
     let result = run(config, input);
-    assert!(result.is_ok(), "README 3 failed");
+    assert!(result.is_ok(), "README 3  failed {}", result.err().unwrap());
 }
 
 // 4. Status Code Distribution
@@ -194,7 +194,7 @@ order = "DESC"
     let input = setup_test_logs();
 
     let result = run(config, input);
-    assert!(result.is_ok(), "README 4 failed");
+    assert!(result.is_ok(), "README 4  failed {}", result.err().unwrap());
 }
 
 // 5. Top Endpoints by Request Volume
@@ -207,26 +207,20 @@ fn readme_top_endpoints_by_request_volume() {
 type = "GroupBy"
 columns = ["endpoint"]
 aggregate = [
-  { column = "request_id", function = "COUNT" }
-]
-
-[[operations]]
-type = "Rename"
-mappings = [
-  { old_name = "request_id_COUNT", new_name = "request_count" }
+  { column = "request_id", function = "COUNT", alias = "request_count" }
 ]
 
 [[operations]]
 type = "Sort"
 column = "request_count"
 order = "DESC"
-limit = 10
+limit = 5
 "#,
     );
     let input = setup_test_logs();
 
     let result = run(config, input);
-    assert!(result.is_ok(), "README 5 failed");
+    assert!(result.is_ok(), "README 5  failed {}", result.err().unwrap());
 }
 
 // 6. P90 Response Time with Window Function
@@ -255,7 +249,7 @@ output_column = "p90_response_time"
     let input = setup_test_logs();
 
     let result = run(config, input);
-    assert!(result.is_ok(), "README 6 failed");
+    assert!(result.is_ok(), "README 6  failed {}", result.err().unwrap());
 }
 
 // 7. Latency Heatmap by Hour and Endpoint
@@ -287,7 +281,7 @@ aggregate_function = "MEAN"
     let input = setup_test_logs();
 
     let result = run(config, input);
-    assert!(result.is_ok(), "README 7 failed");
+    assert!(result.is_ok(), "README 7  failed {}", result.err().unwrap());
 }
 
 // 8. Throughput (Requests Per Second)
@@ -319,7 +313,7 @@ expression = {
     let input = setup_test_logs();
 
     let result = run(config, input);
-    assert!(result.is_ok(), "README 8 failed");
+    assert!(result.is_ok(), "README 8  failed {}", result.err().unwrap());
 }
 
 // 9. Apdex Score (Application Performance Index)
@@ -373,7 +367,7 @@ mappings = [
     let input = setup_test_logs();
 
     let result = run(config, input);
-    assert!(result.is_ok(), "README 9 failed");
+    assert!(result.is_ok(), "README 9  failed {}", result.err().unwrap());
 }
 
 // 10. Latency Percentiles (P50, P95, P99)
@@ -407,7 +401,11 @@ aggregate = [
     let input = setup_test_logs();
 
     let result = run(config, input);
-    assert!(result.is_ok(), "README 10 failed");
+    assert!(
+        result.is_ok(),
+        "README 10  failed {}",
+        result.err().unwrap()
+    );
 }
 
 // 11. Request Method Distribution
@@ -452,7 +450,11 @@ expression = {
     let input = setup_test_logs();
 
     let result = run(config, input);
-    assert!(result.is_ok(), "README 11 failed");
+    assert!(
+        result.is_ok(),
+        "README 11  failed {}",
+        result.err().unwrap()
+    );
 }
 
 // 12. Endpoint Availability/Success Rate
@@ -498,7 +500,11 @@ expression = {
     let input = setup_test_logs();
 
     let result = run(config, input);
-    assert!(result.is_ok(), "README 12 failed");
+    assert!(
+        result.is_ok(),
+        "README 12  failed {}",
+        result.err().unwrap()
+    );
 }
 
 // 13. Error Types Distribution
@@ -536,7 +542,11 @@ limit = 10
     let input = setup_test_logs();
 
     let result = run(config, input);
-    assert!(result.is_ok(), "README 13 failed");
+    assert!(
+        result.is_ok(),
+        "README 13  failed {}",
+        result.err().unwrap()
+    );
 }
 
 // 14. Client/User Agent Analysis
@@ -597,7 +607,11 @@ mappings = [
     let input = setup_test_logs();
 
     let result = run(config, input);
-    assert!(result.is_ok(), "README 14 failed");
+    assert!(
+        result.is_ok(),
+        "README 14  failed {}",
+        result.err().unwrap()
+    );
 }
 
 // 15. Response Size Analysis
@@ -629,7 +643,11 @@ mappings = [
     let input = setup_test_logs();
 
     let result = run(config, input);
-    assert!(result.is_ok(), "README 15 failed");
+    assert!(
+        result.is_ok(),
+        "README 15  failed {}",
+        result.err().unwrap()
+    );
 }
 
 // 16. Anomaly Detection (Detecting Unusual Patterns)
@@ -668,5 +686,9 @@ expression = {
     let input = setup_test_logs();
 
     let result = run(config, input);
-    assert!(result.is_ok(), "README 16 failed");
+    assert!(
+        result.is_ok(),
+        "README 16  failed {}",
+        result.err().unwrap()
+    );
 }
