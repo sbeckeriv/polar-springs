@@ -322,45 +322,24 @@ fn readme_apdex_score() {
     let config = setup_test_config(
         "readme_apdex_score",
         r#"
+
 [[operations]]
 type = "WithColumn"
 name = "satisfaction"
-expression = {
-  type = "Conditional",
-  condition = {
-    type = "BinaryOp",
-    left = { type = "Column", "response_time" },
-    op = "LTE",
-    right = { type = "Literal", 300 }
-  },
-  then = { type = "Literal", 1 },
-  otherwise = {
-    type = "Conditional",
-    condition = {
-      type = "BinaryOp",
-      left = { type = "Column", "response_time" },
-      op = "LTE",
-      right = { type = "Literal", 1200 }
-    },
-    then = { type = "Literal", 0.5 },
-    otherwise = { type = "Literal", 0 }
-  }
-}
+output_column = "satisfaction"
+expression = { type = "Conditional", condition = { type = "BinaryOp", left = { type = "Column", value = "response_time_ms" }, op = "LTE", right = { type = "Literal", value= 300 } }, then = { type = "Literal", value = 1 }, otherwise = { type = "Conditional", condition = { type = "BinaryOp", left = { type = "Column",value= "response_time_ms" }, op = "LTE", right = { type = "Literal",value= 1200 } }, then = { type = "Literal",value= 0.5 }, otherwise = { type = "Literal", value=0 } } }
+
 
 [[operations]]
 type = "GroupByTime"
 time_column = "timestamp"
 every = 300
 unit = "Seconds"
+timestamp_format = "%Y-%m-%dT%H:%M:%S%z"
+additional_groups = ["endpoint"]
 aggregate = [
-  { column = "satisfaction", function = "MEAN" },
-  { column = "request_id", function = "COUNT" }
-]
-
-[[operations]]
-type = "Rename"
-mappings = [
-  { old_name = "satisfaction_MEAN", new_name = "apdex_score" }
+  { column = "satisfaction", function = "MEAN", alias = "apdex_score"},
+  { column = "request_id", function = "COUNT", alias = "request_count" }
 ]
 "#,
     );
@@ -418,13 +397,7 @@ fn readme_request_method_distribution() {
 type = "GroupBy"
 columns = ["http_method"]
 aggregate = [
-  { column = "request_id", function = "COUNT" }
-]
-
-[[operations]]
-type = "Rename"
-mappings = [
-  { old_name = "request_id_COUNT", new_name = "request_count" }
+  { column = "request_id", function = "COUNT", alias = "request_count" }
 ]
 
 [[operations]]
@@ -523,13 +496,7 @@ filter = 400
 type = "GroupBy"
 columns = ["error_type", "error_message"]
 aggregate = [
-  { column = "request_id", function = "COUNT" }
-]
-
-[[operations]]
-type = "Rename"
-mappings = [
-  { old_name = "request_id_COUNT", new_name = "error_count" }
+  { column = "request_id", function = "COUNT", alias = "error_count" }
 ]
 
 [[operations]]
@@ -594,13 +561,7 @@ expression = {
 type = "GroupBy"
 columns = ["browser_type"]
 aggregate = [
-  { column = "request_id", function = "COUNT" }
-]
-
-[[operations]]
-type = "Rename"
-mappings = [
-  { old_name = "request_id_COUNT", new_name = "request_count" }
+  { column = "request_id", function = "COUNT", alias = "request_count" }
 ]
 "#,
     );
@@ -626,18 +587,11 @@ time_column = "timestamp"
 every = 300
 unit = "Seconds"
 aggregate = [
-  { column = "response_size", function = "MEAN" },
-  { column = "response_size", function = "MAX" },
-  { column = "response_size", function = "SUM" }
+  { column = "response_size", function = "MEAN" , alias = "avg_response_size"},
+  { column = "response_size", function = "MAX" , alias = "max_response_size"},
+  { column = "response_size", function = "SUM" , alias = "total_bandwidth"}
 ]
 
-[[operations]]
-type = "Rename"
-mappings = [
-  { old_name = "response_size_MEAN", new_name = "avg_response_size" },
-  { old_name = "response_size_MAX", new_name = "max_response_size" },
-  { old_name = "response_size_SUM", new_name = "total_bandwidth" }
-]
 "#,
     );
     let input = setup_test_logs();
@@ -662,7 +616,7 @@ time_column = "timestamp"
 every = 60
 unit = "Seconds"
 aggregate = [
-  { column = "request_id", function = "COUNT" }
+  { column = "request_id", function = "COUNT", alias = "request_id_COUNT" }
 ]
 
 [[operations]]

@@ -46,8 +46,7 @@ pub enum Operation {
         unit: TimeUnit,
         #[serde(default)]
         output_column: Option<String>, // Name for the resulting time bucket column
-        #[serde(default)]
-        timestamp_format: Option<String>,
+        timestamp_format: String,
         #[serde(default)]
         timestamp_timezone: Option<String>, // default UTC
         #[serde(default)]
@@ -541,8 +540,7 @@ impl Operation {
                 output_column,
                 timestamp_format,
                 timestamp_timezone,
-                additional_groups,
-                aggregate,
+                ..
             } => {
                 // Create time bucket column
                 //2023-04-01T00:01:35-07:00
@@ -551,10 +549,7 @@ impl Operation {
                     TimeUnitPrecision::Microseconds => polars::prelude::TimeUnit::Microseconds,
                     TimeUnitPrecision::Milliseconds => polars::prelude::TimeUnit::Milliseconds,
                 });
-                let format = timestamp_format
-                    .to_owned()
-                    .or_else(|| Some("%Y-%m-%d %H:%M:%S".to_string()))
-                    .map(|f| f.into());
+                let format = Some(timestamp_format.into());
                 let timezone = timestamp_timezone
                     .as_ref()
                     .map(|f| polars::prelude::TimeZone::from_string(f.into()));

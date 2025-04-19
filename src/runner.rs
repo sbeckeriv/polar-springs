@@ -144,18 +144,19 @@ fn operations(df: LazyFrame, config: &Config) -> Result<LazyFrame, Box<dyn std::
                 df = df.lazy().with_column(operation.to_polars_expr()?);
             }
             config::Operation::GroupByTime {
+                time_column,
                 output_column,
                 additional_groups,
                 aggregate,
                 ..
             } => {
-                let time_bucket_col = output_column.as_deref().unwrap_or("time_bucket");
+                let time_bucket_col = output_column.clone().unwrap_or_else(|| time_column.clone());
                 let truncate_expr = operation.to_polars_expr()?;
                 // Create a DataFrame with the time bucket
                 let df_with_bucket = df.clone().lazy().with_column(truncate_expr).collect()?;
 
                 // Build the group by columns (time bucket + additional groups)
-                let mut group_cols = vec![time_bucket_col];
+                let mut group_cols = vec![time_bucket_col.as_str()];
                 group_cols.extend(additional_groups.iter().map(|s| s.as_str()));
 
                 // Prepare the aggregation expressions
