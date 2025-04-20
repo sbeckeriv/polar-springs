@@ -212,13 +212,13 @@ time_column = "timestamp"
 every = 60
 unit = "Seconds"
 aggregate = [
-  { column = "response_time", function = "MEAN" }
+  { column = "response_time", function = "MEAN", alias = "response_time_MEAN" },
 ]
 
 [[operations]]
 type = "Window"
 column = "response_time_MEAN"
-function = "RollingMean"
+function = {type ="rollingmean"}
 window_size = 5
 output_column = "p90_response_time"
 "#,
@@ -541,6 +541,7 @@ aggregate = [
 // 16. Anomaly Detection (Detecting Unusual Patterns)
 #[test]
 fn readme_anomaly_detection() {
+    // im nto sure this is correct data
     let config = setup_test_config(
         "readme_anomaly_detection",
         r#"
@@ -548,27 +549,28 @@ fn readme_anomaly_detection() {
 type = "GroupByTime"
 time_column = "timestamp"
 every = 60
+timestamp_format = "%Y-%m-%dT%H:%M:%S%z"
 unit = "Seconds"
+additional_groups = ["endpoint"]
 aggregate = [
   { column = "request_id", function = "COUNT", alias = "request_id_COUNT" }
 ]
 
 [[operations]]
+name = "average_requests"
 type = "Window"
 column = "request_id_COUNT"
-function = "RollingMean"
+function = {type = "rollingmean"}
+partition_by = ["endpoint"]
 window_size = 30  # 30-minute rolling average
 output_column = "average_requests"
+order_by = ["endpoint", "timestamp"]
 
 [[operations]]
 type = "WithColumn"
 name = "deviation"
-expression = {
-  type = "BinaryOp",
-  left = { type = "Column", "request_id_COUNT" },
-  op = "SUBTRACT",
-  right = { type = "Column", "average_requests" }
-}
+expression = { type = "BinaryOp", left = { type = "Column", value ="request_id_COUNT" }, op = "SUBTRACT", right = { type = "Column",value= "average_requests" } }
+
 "#,
     );
     let input = setup_test_logs();

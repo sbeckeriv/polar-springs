@@ -1,4 +1,4 @@
-use polars::prelude::{col, lit, when, DataType, Expr, NULL};
+use polars::prelude::{col, lit, when, DataType, Expr, RollingOptionsFixedWindow, NULL};
 use serde::Deserialize;
 
 #[derive(Deserialize, Debug)]
@@ -125,6 +125,7 @@ pub enum WindowFunction {
         offset: u32,
         default_value: Option<LiteralValue>,
     },
+    RollingMean,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -621,6 +622,17 @@ impl Operation {
                     WindowFunction::Sum => col(column).sum().over(partition_exprs.clone()),
                     WindowFunction::Min => col(column).min().over(partition_exprs.clone()),
                     WindowFunction::Max => col(column).max().over(partition_exprs.clone()),
+                    WindowFunction::RollingMean => {
+                        let options = RollingOptionsFixedWindow {
+                            window_size: 3,
+                            min_periods: 1,
+                            center: false,
+                            ..Default::default()
+                        };
+                        col(column)
+                            .rolling_mean(options)
+                            .over(partition_exprs.clone())
+                    }
                     WindowFunction::Mean => col(column).mean().over(partition_exprs.clone()),
                     WindowFunction::Count => col(column).count().over(partition_exprs.clone()),
                     WindowFunction::First => col(column).first().over(partition_exprs.clone()),
