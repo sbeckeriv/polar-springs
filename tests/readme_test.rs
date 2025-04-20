@@ -522,40 +522,12 @@ fn readme_client_user_agent_analysis() {
     let config = setup_test_config(
         "readme_client_user_agent_analysis",
         r#"
+
 [[operations]]
 type = "WithColumn"
 name = "browser_type"
-expression = {
-  type = "Function",
-  name = "CONCAT",
-  args = [
-    {
-      type = "Conditional",
-      condition = {
-        type = "Function",
-        name = "CONCAT",
-        args = [
-          { type = "Column", "user_agent" },
-          { type = "Literal", "Chrome" }
-        ]
-      },
-      then = { type = "Literal", "Chrome" },
-      otherwise = {
-        type = "Conditional",
-        condition = {
-          type = "Function",
-          name = "CONCAT",
-          args = [
-            { type = "Column", "user_agent" },
-            { type = "Literal", "Firefox" }
-          ]
-        },
-        then = { type = "Literal", "Firefox" },
-        otherwise = { type = "Literal", "Other" }
-      }
-    }
-  ]
-}
+expression = { type = "Conditional", condition = { type = "Function", name = {"CONTAINS" = {column = "user_agent", value = "Chrome"}} }, then = { type = "Literal", value = "Chrome" }, otherwise = { type = "Conditional", condition = { type = "Function", name = {"CONTAINS" = {column = "user_agent", value = "Safari"}} }, then = { type = "Literal", value = "Safari" }, otherwise = { type = "Literal", value = "Other" } } }
+
 
 [[operations]]
 type = "GroupBy"

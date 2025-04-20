@@ -247,6 +247,10 @@ pub enum Expression {
 
 #[derive(Deserialize, Debug)]
 pub enum ExpressionFunction {
+    CONCAT {
+        column1: String,
+        column2: String,
+    },
     LOWER {
         column: String,
     },
@@ -312,6 +316,14 @@ pub enum ExpressionFunction {
     },
     SQRT {
         column: String,
+    },
+    CONTAINS {
+        column: String,
+        value: String,
+    },
+    REGEX_MATCH {
+        column: String,
+        pattern: String,
     },
 }
 #[derive(Deserialize, Debug)]
@@ -433,6 +445,9 @@ impl Expression {
 
             Expression::Function { name } => {
                 match name {
+                    ExpressionFunction::CONCAT { column1, column2 } => Ok(col(column1)
+                        .cast(DataType::String)
+                        + col(column2).cast(DataType::String)),
                     ExpressionFunction::LOWER { column } => Ok(col(column).str().to_lowercase()),
                     ExpressionFunction::UPPER { column } => Ok(col(column).str().to_uppercase()),
                     ExpressionFunction::DATEPART => {
@@ -489,6 +504,13 @@ impl Expression {
                     }
                     ExpressionFunction::SECOND { column } => {
                         Ok(col(column).dt().second().cast(DataType::Int32))
+                    }
+                    ExpressionFunction::CONTAINS { column, value } => {
+                        Ok(col(column).str().contains_literal(lit(value.clone())))
+                    }
+
+                    ExpressionFunction::REGEX_MATCH { column, pattern } => {
+                        Ok(col(column).str().contains(lit(pattern.clone()), true))
                     }
                     ExpressionFunction::FLOOR { column } => Ok(col(column).floor()),
                     ExpressionFunction::CEIL { column } => Ok(col(column).ceil()),
