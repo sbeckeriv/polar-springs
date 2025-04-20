@@ -104,37 +104,23 @@ fn readme_error_rate_over_time() {
 [[operations]]
 type = "WithColumn"
 name = "is_error"
-expression = { 
-  type = "BinaryOp", 
-  left = { type = "Column", "status_code" }, 
-  op = "GTE", 
-  right = { type = "Literal", 400 }
-}
+expression = { type = "BinaryOp", left = { type = "Column", value ="status_code" }, op = "GTE", right = { type = "Literal", value=400 } }
 
 [[operations]]
 type = "GroupByTime"
 time_column = "timestamp"
 every = 300
+timestamp_format = "%Y-%m-%dT%H:%M:%S%z"
 unit = "Seconds"
 aggregate = [
-  { column = "request_id", function = "COUNT" },
-  { column = "is_error", function = "SUM" }
+  { column = "request_id", function = "COUNT", alias = "request_id_COUNT" },
+  { column = "is_error", function = "SUM", alias = "is_error_SUM" }
 ]
 
 [[operations]]
 type = "WithColumn"
 name = "error_rate"
-expression = { 
-  type = "BinaryOp", 
-  left = { 
-    type = "BinaryOp", 
-    left = { type = "Column", "is_error_SUM" }, 
-    op = "MULTIPLY", 
-    right = { type = "Literal", 100.0 }
-  }, 
-  op = "DIVIDE", 
-  right = { type = "Column", "request_id_COUNT" }
-}
+expression = { type = "BinaryOp", left = { type = "BinaryOp", left = { type = "Column", value = "is_error_SUM" }, op = "MULTIPLY", right = { type = "Literal", value = 100.0 } }, op = "DIVIDE", right = { type = "Column", value= "request_id_COUNT" } }
 "#,
     );
     let input = setup_test_logs();
@@ -149,34 +135,25 @@ fn readme_status_code_distribution() {
     let config = setup_test_config(
         "readme_status_code_distribution",
         r#"
+
 [[operations]]
 type = "WithColumn"
-name = "status_category"
-expression = {
-  type = "Function",
-  name = "CONCAT",
-  args = [
-    {
-      type = "Function",
-      name = "ROUND",
-      args = [
-        {
-          type = "BinaryOp",
-          left = { type = "Column", "status_code" },
-          op = "DIVIDE",
-          right = { type = "Literal", 100 }
-        }
-      ]
-    },
-    { type = "Literal", "xx" }
-  ]
-}
+name = "status_code_hundredths"
+[operations.expression]
+type = "BinaryOp"
+op = "DIVIDE"
+    [operations.expression.left]
+    type = "Column"
+    value = "status_code"
+    [operations.expression.right]
+    type = "Literal"
+    value =  100 
 
 [[operations]]
 type = "GroupBy"
-columns = ["status_category"]
+columns = ["status_code_hundredths"]
 aggregate = [
-  { column = "request_id", function = "COUNT" }
+  { column = "request_id", function = "COUNT", alias = "request_id_COUNT" }
 ]
 
 [[operations]]
@@ -439,36 +416,21 @@ fn readme_endpoint_availability_success_rate() {
 [[operations]]
 type = "WithColumn"
 name = "is_success"
-expression = {
-  type = "BinaryOp",
-  left = { type = "Column", "status_code" },
-  op = "LT",
-  right = { type = "Literal", 400 }
-}
+expression = { type = "BinaryOp", left = { type = "Column", value ="status_code" }, op = "LT", right = { type = "Literal", value = 400 } }
 
 [[operations]]
 type = "GroupBy"
 columns = ["endpoint"]
 aggregate = [
-  { column = "request_id", function = "COUNT" },
-  { column = "is_success", function = "SUM" }
+  { column = "request_id", function = "COUNT", alias = "request_id_COUNT" },
+  { column = "is_success", function = "SUM", alias = "is_success_SUM" }
 ]
 
 [[operations]]
 type = "WithColumn"
 name = "availability"
-expression = {
-  type = "BinaryOp",
-  left = {
-    type = "BinaryOp",
-    left = { type = "Column", "is_success_SUM" },
-    op = "MULTIPLY",
-    right = { type = "Literal", 100 }
-  },
-  op = "DIVIDE",
-  right = { type = "Column", "request_id_COUNT" }
-}
-"#,
+expression = { type = "BinaryOp", left = { type = "BinaryOp", left = { type = "Column", value = "is_success_SUM" }, op = "MULTIPLY", right = { type = "Literal",  value =100 } }, op = "DIVIDE", right = { type = "Column", value= "request_id_COUNT" } }
+ "#,
     );
     let input = setup_test_logs();
 
