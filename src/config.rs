@@ -46,11 +46,8 @@ pub enum Operation {
         unit: TimeUnit,
         #[serde(default)]
         output_column: Option<String>, // Name for the resulting time bucket column
-        timestamp_format: String,
-        #[serde(default)]
-        timestamp_timezone: Option<String>, // default UTC
-        #[serde(default)]
-        precision: Option<TimeUnitPrecision>,
+        #[serde(flatten)]
+        timestamp_format: TimestampFormat,
         #[serde(default)]
         additional_groups: Vec<String>, // Additional columns to group by
         aggregate: Vec<Aggregate>,
@@ -100,6 +97,44 @@ pub enum Operation {
     Rename {
         mappings: Vec<ColumnRename>,
     },
+}
+#[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all = "lowercase")]
+pub struct TimestampFormat {
+    timestamp_format: String,
+    #[serde(default)]
+    timestamp_timezone: Option<String>, // default UTC
+    #[serde(default)]
+    precision: Option<TimeUnitPrecision>,
+}
+impl TimestampFormat {
+    pub fn expr_for_column(&self, time_col: &str) -> Expr {
+        // Create time bucket column
+        //2023-04-01T00:01:35-07:00
+        let precision = self.precision.as_ref().map(|f| match f {
+            TimeUnitPrecision::Nanoseconds => polars::prelude::TimeUnit::Nanoseconds,
+            TimeUnitPrecision::Microseconds => polars::prelude::TimeUnit::Microseconds,
+            TimeUnitPrecision::Milliseconds => polars::prelude::TimeUnit::Milliseconds,
+        });
+
+        let format = Some(self.timestamp_format.clone().into());
+        let timezone = self
+            .timestamp_timezone
+            .as_ref()
+            .map(|f| polars::prelude::TimeZone::from_string(f.into()));
+        let expr = col(time_col);
+        expr.str().to_datetime(
+            precision,
+            timezone, // UTC timezone (or use your specific zone)
+            polars::prelude::StrptimeOptions {
+                format,        // Your datetime format
+                strict: false, // Allow some flexibility in parsing
+                exact: true,   // Require the entire string to match
+                cache: true,   // Cache parsed patterns for performance
+            },
+            lit("infer"), // How to handle ambiguous dates (options: "raise", "infer", etc.)
+        )
+    }
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -155,7 +190,7 @@ pub enum FilterField {
     DateTime(chrono::DateTime<chrono::Utc>),
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub enum TimeUnitPrecision {
     Nanoseconds,
     Microseconds,
@@ -293,21 +328,33 @@ pub enum ExpressionFunction {
     },
     YEAR {
         column: String,
+        #[serde(flatten)]
+        timestamp_format: TimestampFormat,
     },
     MONTH {
         column: String,
+        #[serde(flatten)]
+        timestamp_format: TimestampFormat,
     },
     DAY {
         column: String,
+        #[serde(flatten)]
+        timestamp_format: TimestampFormat,
     },
     HOUR {
         column: String,
+        #[serde(flatten)]
+        timestamp_format: TimestampFormat,
     },
     MINUTE {
         column: String,
+        #[serde(flatten)]
+        timestamp_format: TimestampFormat,
     },
     SECOND {
         column: String,
+        #[serde(flatten)]
+        timestamp_format: TimestampFormat,
     },
     FLOOR {
         column: String,
@@ -488,24 +535,54 @@ impl Expression {
                     } => Ok(col(column).str().slice(lit(*start), lit(*length))),
                     ExpressionFunction::ISNULL { column } => Ok(col(column).is_null()),
                     ExpressionFunction::ISNOTNULL { column } => Ok(col(column).is_not_null()),
-                    ExpressionFunction::YEAR { column } => {
-                        Ok(col(column).dt().year().cast(DataType::Int32))
-                    }
-                    ExpressionFunction::MONTH { column } => {
-                        Ok(col(column).dt().month().cast(DataType::Int32))
-                    }
-                    ExpressionFunction::DAY { column } => {
-                        Ok(col(column).dt().day().cast(DataType::Int32))
-                    }
-                    ExpressionFunction::HOUR { column } => {
-                        Ok(col(column).dt().hour().cast(DataType::Int32))
-                    }
-                    ExpressionFunction::MINUTE { column } => {
-                        Ok(col(column).dt().minute().cast(DataType::Int32))
-                    }
-                    ExpressionFunction::SECOND { column } => {
-                        Ok(col(column).dt().second().cast(DataType::Int32))
-                    }
+                    ExpressionFunction::YEAR {
+                        column,
+                        timestamp_format,
+                    } => Ok(timestamp_format
+                        .expr_for_column(column)
+                        .dt()
+                        .year()
+                        .cast(DataType::Int32)),
+                    ExpressionFunction::MONTH {
+                        column,
+                        timestamp_format,
+                    } => Ok(timestamp_format
+                        .expr_for_column(column)
+                        .dt()
+                        .month()
+                        .cast(DataType::Int32)),
+                    ExpressionFunction::DAY {
+                        column,
+                        timestamp_format,
+                    } => Ok(timestamp_format
+                        .expr_for_column(column)
+                        .dt()
+                        .day()
+                        .cast(DataType::Int32)),
+                    ExpressionFunction::HOUR {
+                        column,
+                        timestamp_format,
+                    } => Ok(timestamp_format
+                        .expr_for_column(column)
+                        .dt()
+                        .hour()
+                        .cast(DataType::Int32)),
+                    ExpressionFunction::MINUTE {
+                        column,
+                        timestamp_format,
+                    } => Ok(timestamp_format
+                        .expr_for_column(column)
+                        .dt()
+                        .minute()
+                        .cast(DataType::Int32)),
+                    ExpressionFunction::SECOND {
+                        column,
+                        timestamp_format,
+                    } => Ok(timestamp_format
+                        .expr_for_column(column)
+                        .dt()
+                        .second()
+                        .cast(DataType::Int32)),
                     ExpressionFunction::CONTAINS { column, value } => {
                         Ok(col(column).str().contains_literal(lit(value.clone())))
                     }
@@ -559,35 +636,11 @@ impl Operation {
                 time_column,
                 every,
                 unit,
-                precision,
                 output_column,
                 timestamp_format,
-                timestamp_timezone,
                 ..
             } => {
-                // Create time bucket column
-                //2023-04-01T00:01:35-07:00
-                let precision = precision.as_ref().map(|f| match f {
-                    TimeUnitPrecision::Nanoseconds => polars::prelude::TimeUnit::Nanoseconds,
-                    TimeUnitPrecision::Microseconds => polars::prelude::TimeUnit::Microseconds,
-                    TimeUnitPrecision::Milliseconds => polars::prelude::TimeUnit::Milliseconds,
-                });
-                let format = Some(timestamp_format.into());
-                let timezone = timestamp_timezone
-                    .as_ref()
-                    .map(|f| polars::prelude::TimeZone::from_string(f.into()));
-                let expr = col(time_column);
-                let expr = expr.str().to_datetime(
-                    precision,
-                    timezone, // UTC timezone (or use your specific zone)
-                    polars::prelude::StrptimeOptions {
-                        format,        // Your datetime format
-                        strict: false, // Allow some flexibility in parsing
-                        exact: true,   // Require the entire string to match
-                        cache: true,   // Cache parsed patterns for performance
-                    },
-                    lit("infer"), // How to handle ambiguous dates (options: "raise", "infer", etc.)
-                );
+                let expr = timestamp_format.expr_for_column(time_column);
 
                 let mut round_expr = match unit {
                     TimeUnit::Seconds => expr.dt().round(lit(format!("{}s", every))),

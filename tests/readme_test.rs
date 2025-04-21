@@ -236,16 +236,9 @@ fn readme_latency_heatmap_by_hour_and_endpoint() {
         "readme_latency_heatmap_by_hour_and_endpoint",
         r#"
 [[operations]]
-type = "WithColumn"
+type = "WithColumn" 
 name = "hour_of_day"
-expression = {
-  type = "Function",
-  name = "DATEPART",
-  args = [
-    { type = "Literal", "hour" },
-    { type = "Column", "timestamp" }
-  ]
-}
+expression = { type = "Function", name = {HOUR =  { column ="timestamp", timestamp_format = "%Y-%m-%dT%H:%M:%S%z" } } }
 
 [[operations]]
 type = "Pivot"
