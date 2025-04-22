@@ -208,15 +208,20 @@ fn readme_p90_response_time_with_window_function() {
         r#"
 [[operations]]
 type = "GroupByTime"
+timestamp_format = "%Y-%m-%dT%H:%M:%S%z"
 time_column = "timestamp"
 every = 60
 unit = "Seconds"
+additional_groups = ["endpoint"]
 aggregate = [
-  { column = "response_time", function = "MEAN", alias = "response_time_MEAN" },
+  { column = "response_time_ms", function = "MEAN", alias = "response_time_MEAN" },
 ]
 
 [[operations]]
 type = "Window"
+name ="p90_response_time"
+partition_by = ["endpoint"]
+order_by = ["endpoint","timestamp"]
 column = "response_time_MEAN"
 function = {type ="rollingmean"}
 window_size = 5
@@ -262,6 +267,7 @@ fn readme_throughput_requests_per_second() {
         r#"
 [[operations]]
 type = "GroupByTime"
+timestamp_format = "%Y-%m-%dT%H:%M:%S%z"
 time_column = "timestamp"
 every = 60
 unit = "Seconds"
@@ -329,17 +335,19 @@ fn readme_latency_percentiles() {
 type = "GroupByTime"
 time_column = "timestamp"
 every = 300
+timestamp_format = "%Y-%m-%dT%H:%M:%S%z"
 unit = "Seconds"
+additional_groups = ["endpoint"]
 aggregate = [
-  { column = "response_time", function = "MEDIAN" }
+  { column = "response_time_ms", function = "MEDIAN", alias="p50"}
 ]
 
 [[operations]]
 type = "GroupBy"
 columns = ["endpoint"]
 aggregate = [
-  { column = "response_time", function = "MEAN" },
-  { column = "response_time", function = "MEDIAN" }
+  { column = "response_time_ms", function = "MEAN" },
+  { column = "response_time_ms", function = "MEDIAN" }
 ]
 
 # Note: For P95 and P99, we'd typically use quantile functions
@@ -365,7 +373,8 @@ fn readme_request_method_distribution() {
         r#"
 [[operations]]
 type = "GroupBy"
-columns = ["http_method"]
+columns = ["method"]
+
 aggregate = [
   { column = "request_id", function = "COUNT", alias = "request_count" }
 ]
@@ -373,21 +382,7 @@ aggregate = [
 [[operations]]
 type = "WithColumn"
 name = "percentage"
-expression = {
-  type = "BinaryOp",
-  left = {
-    type = "BinaryOp",
-    left = { type = "Column", "request_count" },
-    op = "MULTIPLY",
-    right = { type = "Literal", 100 }
-  },
-  op = "DIVIDE",
-  right = {
-    type = "Function",
-    name = "SUM",
-    args = [{ type = "Column", "request_count" }]
-  }
-}
+expression = { type = "BinaryOp", left = { type = "BinaryOp", left = { type = "Column", value= "request_count" }, op = "MULTIPLY", right = { type = "Literal", value=100 } }, op = "DIVIDE", right = { type = "Function", name = {"SUM" = { column= "request_count" }} } }
 "#,
     );
     let input = setup_test_logs();
@@ -512,6 +507,7 @@ fn readme_response_size_analysis() {
 type = "GroupByTime"
 time_column = "timestamp"
 every = 300
+timestamp_format = "%Y-%m-%dT%H:%M:%S%z"
 unit = "Seconds"
 aggregate = [
   { column = "response_size", function = "MEAN" , alias = "avg_response_size"},

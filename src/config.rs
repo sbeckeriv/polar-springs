@@ -294,6 +294,9 @@ pub enum ExpressionFunction {
         column: String,
     },
     DATEPART,
+    SUM {
+        column: String,
+    },
     ABS {
         column: String,
     },
@@ -503,6 +506,7 @@ impl Expression {
                         Ok(col("date").dt().year())
                     }
                     ExpressionFunction::ABS { column } => Ok(col(column).abs()),
+                    ExpressionFunction::SUM { column } => Ok(col(column).sum()),
                     ExpressionFunction::ROUND { column, num } => Ok(col(column).round(*num)),
                     ExpressionFunction::TOINT { size, column } => {
                         let col = col(column);
