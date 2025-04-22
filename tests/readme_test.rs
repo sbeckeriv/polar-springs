@@ -272,18 +272,13 @@ time_column = "timestamp"
 every = 60
 unit = "Seconds"
 aggregate = [
-  { column = "request_id", function = "COUNT" }
+  { column = "request_id", function = "COUNT", alias = "request_id_COUNT" }
 ]
-
+# silly when we can group by second above
 [[operations]]
 type = "WithColumn"
 name = "requests_per_second"
-expression = { 
-  type = "BinaryOp", 
-  left = { type = "Column", "request_id_COUNT" }, 
-  op = "DIVIDE", 
-  right = { type = "Literal", 60 }
-}
+expression = { type = "BinaryOp", left = { type = "Column", value = "request_id_COUNT" }, op = "DIVIDE", right = { type = "Literal", value= 60 } }
 "#,
     );
     let input = setup_test_logs();
