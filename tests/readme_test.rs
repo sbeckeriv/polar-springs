@@ -505,9 +505,9 @@ every = 300
 timestamp_format = "%Y-%m-%dT%H:%M:%S%z"
 unit = "Seconds"
 aggregate = [
-  { column = "response_size", function = "MEAN" , alias = "avg_response_size"},
-  { column = "response_size", function = "MAX" , alias = "max_response_size"},
-  { column = "response_size", function = "SUM" , alias = "total_bandwidth"}
+  { column = "request_size_bytes", function = "MEAN" , alias = "avg_response_size"},
+  { column = "request_size_bytes", function = "MAX" , alias = "max_response_size"},
+  { column = "request_size_bytes", function = "SUM" , alias = "total_bandwidth"}
 ]
 
 "#,
