@@ -6,25 +6,18 @@ Aspirational configurations.
 
 ```toml
 [[operations]]
-type = "Filter"
-column = "type"
-condition = "EQ"
-filter = "request"
-
-[[operations]]
 type = "GroupByTime"
 time_column = "timestamp"
-every = 60
-unit = "Seconds"
-aggregate = [
-  { column = "request_id", function = "COUNT" }
-]
+every = 1
+unit = "Minutes"
+timestamp_format = "%Y-%m-%dT%H:%M:%S%z"
+output_column = "minute_bucket"
+aggregate = [ { column = "response_time_ms", function = "MEAN" },  { column = "request_id", function = "COUNT" } ]
 
 [[operations]]
-type = "Rename"
-mappings = [
-  { old_name = "request_id_COUNT", new_name = "request_count" }
-]
+type = "Sort"
+column = "minute_bucket"
+order = "desc"
 ```
 
 ## 2. Average Response Time by Endpoint
@@ -34,24 +27,16 @@ mappings = [
 type = "GroupBy"
 columns = ["endpoint"]
 aggregate = [
-  { column = "response_time", function = "MEAN" },
-  { column = "response_time", function = "MAX" },
-  { column = "response_time", function = "MIN" }
-]
-
-[[operations]]
-type = "Rename"
-mappings = [
-  { old_name = "response_time_MEAN", new_name = "avg_response_time" },
-  { old_name = "response_time_MAX", new_name = "max_response_time" },
-  { old_name = "response_time_MIN", new_name = "min_response_time" }
+  { column = "response_time_ms", function = "MEAN", alias = "response_time_mean" },
+  { column = "response_time_ms", function = "MAX", alias = "response_time_max" },
+  { column = "response_time_ms", function = "MIN", alias = "response_time_min" },
+  { column = "request_id", function = "COUNT", alias = "request_count" }
 ]
 
 [[operations]]
 type = "Sort"
-column = "avg_response_time"
+column = "response_time_mean"
 order = "DESC"
-limit = 10
 ```
 
 ## 3. Error Rate Over Time
@@ -60,37 +45,23 @@ limit = 10
 [[operations]]
 type = "WithColumn"
 name = "is_error"
-expression = { 
-  type = "BinaryOp", 
-  left = { type = "Column", "status_code" }, 
-  op = "GTE", 
-  right = { type = "Literal", 400 }
-}
+expression = { type = "BinaryOp", left = { type = "Column", value ="status_code" }, op = "GTE", right = { type = "Literal", value=400 } }
 
 [[operations]]
 type = "GroupByTime"
 time_column = "timestamp"
 every = 300
+timestamp_format = "%Y-%m-%dT%H:%M:%S%z"
 unit = "Seconds"
 aggregate = [
-  { column = "request_id", function = "COUNT" },
-  { column = "is_error", function = "SUM" }
+  { column = "request_id", function = "COUNT", alias = "request_id_COUNT" },
+  { column = "is_error", function = "SUM", alias = "is_error_SUM" }
 ]
 
 [[operations]]
 type = "WithColumn"
 name = "error_rate"
-expression = { 
-  type = "BinaryOp", 
-  left = { 
-    type = "BinaryOp", 
-    left = { type = "Column", "is_error_SUM" }, 
-    op = "MULTIPLY", 
-    right = { type = "Literal", 100.0 }
-  }, 
-  op = "DIVIDE", 
-  right = { type = "Column", "request_id_COUNT" }
-}
+expression = { type = "BinaryOp", left = { type = "BinaryOp", left = { type = "Column", value = "is_error_SUM" }, op = "MULTIPLY", right = { type = "Literal", value = 100.0 } }, op = "DIVIDE", right = { type = "Column", value= "request_id_COUNT" } }
 ```
 
 ## 4. Status Code Distribution
@@ -98,32 +69,22 @@ expression = {
 ```toml
 [[operations]]
 type = "WithColumn"
-name = "status_category"
-expression = {
-  type = "Function",
-  name = "CONCAT",
-  args = [
-    {
-      type = "Function",
-      name = "ROUND",
-      args = [
-        {
-          type = "BinaryOp",
-          left = { type = "Column", "status_code" },
-          op = "DIVIDE",
-          right = { type = "Literal", 100 }
-        }
-      ]
-    },
-    { type = "Literal", "xx" }
-  ]
-}
+name = "status_code_hundredths"
+[operations.expression]
+type = "BinaryOp"
+op = "DIVIDE"
+    [operations.expression.left]
+    type = "Column"
+    value = "status_code"
+    [operations.expression.right]
+    type = "Literal"
+    value =  100 
 
 [[operations]]
 type = "GroupBy"
-columns = ["status_category"]
+columns = ["status_code_hundredths"]
 aggregate = [
-  { column = "request_id", function = "COUNT" }
+  { column = "request_id", function = "COUNT", alias = "request_id_COUNT" }
 ]
 
 [[operations]]
@@ -145,20 +106,14 @@ order = "DESC"
 type = "GroupBy"
 columns = ["endpoint"]
 aggregate = [
-  { column = "request_id", function = "COUNT" }
-]
-
-[[operations]]
-type = "Rename"
-mappings = [
-  { old_name = "request_id_COUNT", new_name = "request_count" }
+  { column = "request_id", function = "COUNT", alias = "request_count" }
 ]
 
 [[operations]]
 type = "Sort"
 column = "request_count"
 order = "DESC"
-limit = 10
+limit = 5
 ```
 
 ## 6. P90 Response Time with Window Function
@@ -166,17 +121,22 @@ limit = 10
 ```toml
 [[operations]]
 type = "GroupByTime"
+timestamp_format = "%Y-%m-%dT%H:%M:%S%z"
 time_column = "timestamp"
 every = 60
 unit = "Seconds"
+additional_groups = ["endpoint"]
 aggregate = [
-  { column = "response_time", function = "MEAN" }
+  { column = "response_time_ms", function = "MEAN", alias = "response_time_MEAN" },
 ]
 
 [[operations]]
 type = "Window"
+name ="p90_response_time"
+partition_by = ["endpoint"]
+order_by = ["endpoint","timestamp"]
 column = "response_time_MEAN"
-function = "RollingMean"
+function = {type ="rollingmean"}
 window_size = 5
 output_column = "p90_response_time"
 ```
@@ -185,16 +145,9 @@ output_column = "p90_response_time"
 
 ```toml
 [[operations]]
-type = "WithColumn"
+type = "WithColumn" 
 name = "hour_of_day"
-expression = {
-  type = "Function",
-  name = "DATEPART",
-  args = [
-    { type = "Literal", "hour" },
-    { type = "Column", "timestamp" }
-  ]
-}
+expression = { type = "Function", name = {HOUR =  { column ="timestamp", timestamp_format = "%Y-%m-%dT%H:%M:%S%z" } } }
 
 [[operations]]
 type = "Pivot"
@@ -209,22 +162,18 @@ aggregate_function = "MEAN"
 ```toml
 [[operations]]
 type = "GroupByTime"
+timestamp_format = "%Y-%m-%dT%H:%M:%S%z"
 time_column = "timestamp"
 every = 60
 unit = "Seconds"
 aggregate = [
-  { column = "request_id", function = "COUNT" }
+  { column = "request_id", function = "COUNT", alias = "request_id_COUNT" }
 ]
-
+# silly when we can group by second above
 [[operations]]
 type = "WithColumn"
 name = "requests_per_second"
-expression = { 
-  type = "BinaryOp", 
-  left = { type = "Column", "request_id_COUNT" }, 
-  op = "DIVIDE", 
-  right = { type = "Literal", 60 }
-}
+expression = { type = "BinaryOp", left = { type = "Column", value = "request_id_COUNT" }, op = "DIVIDE", right = { type = "Literal", value= 60 } }
 ```
 
 ## 9. Apdex Score (Application Performance Index)
@@ -233,42 +182,19 @@ expression = {
 [[operations]]
 type = "WithColumn"
 name = "satisfaction"
-expression = {
-  type = "Conditional",
-  condition = {
-    type = "BinaryOp",
-    left = { type = "Column", "response_time" },
-    op = "LTE",
-    right = { type = "Literal", 300 }  # Satisfied threshold (300ms)
-  },
-  then = { type = "Literal", 1 },
-  otherwise = {
-    type = "Conditional",
-    condition = {
-      type = "BinaryOp",
-      left = { type = "Column", "response_time" },
-      op = "LTE",
-      right = { type = "Literal", 1200 }  # Tolerating threshold (1.2s)
-    },
-    then = { type = "Literal", 0.5 },
-    otherwise = { type = "Literal", 0 }
-  }
-}
+output_column = "satisfaction"
+expression = { type = "Conditional", condition = { type = "BinaryOp", left = { type = "Column", value = "response_time_ms" }, op = "LTE", right = { type = "Literal", value= 300 } }, then = { type = "Literal", value = 1 }, otherwise = { type = "Conditional", condition = { type = "BinaryOp", left = { type = "Column",value= "response_time_ms" }, op = "LTE", right = { type = "Literal",value= 1200 } }, then = { type = "Literal",value= 0.5 }, otherwise = { type = "Literal", value=0 } } }
 
 [[operations]]
 type = "GroupByTime"
 time_column = "timestamp"
 every = 300
 unit = "Seconds"
+timestamp_format = "%Y-%m-%dT%H:%M:%S%z"
+additional_groups = ["endpoint"]
 aggregate = [
-  { column = "satisfaction", function = "MEAN" },
-  { column = "request_id", function = "COUNT" }
-]
-
-[[operations]]
-type = "Rename"
-mappings = [
-  { old_name = "satisfaction_MEAN", new_name = "apdex_score" }
+  { column = "satisfaction", function = "MEAN", alias = "apdex_score"},
+  { column = "request_id", function = "COUNT", alias = "request_count" }
 ]
 ```
 
@@ -279,22 +205,15 @@ mappings = [
 type = "GroupByTime"
 time_column = "timestamp"
 every = 300
+timestamp_format = "%Y-%m-%dT%H:%M:%S%z"
 unit = "Seconds"
+additional_groups = ["endpoint"]
 aggregate = [
-  { column = "response_time", function = "MEDIAN" }  # P50
+  { column = "response_time_ms", function = "MEDIAN", alias="p50"},
+  { column = "response_time_ms", function = {"PERCENTILE" =  0.99}, alias="p99"},
+  { column = "response_time_ms", function = {"PERCENTILE" = 0.95}, alias="p95"},
+  { column = "request_id", function = "COUNT", alias = "request_count" }
 ]
-
-[[operations]]
-type = "GroupBy"
-columns = ["endpoint"]
-aggregate = [
-  { column = "response_time", function = "MEAN" },
-  { column = "response_time", function = "MEDIAN" }  # P50
-]
-
-# Note: For P95 and P99, we'd typically use quantile functions
-# which aren't directly represented in the current schema but
-# could be added as extensions to AllowedGroupFunction
 ```
 
 ## 11. Request Method Distribution
@@ -302,35 +221,16 @@ aggregate = [
 ```toml
 [[operations]]
 type = "GroupBy"
-columns = ["http_method"]
-aggregate = [
-  { column = "request_id", function = "COUNT" }
-]
+columns = ["method"]
 
-[[operations]]
-type = "Rename"
-mappings = [
-  { old_name = "request_id_COUNT", new_name = "request_count" }
+aggregate = [
+  { column = "request_id", function = "COUNT", alias = "request_count" }
 ]
 
 [[operations]]
 type = "WithColumn"
 name = "percentage"
-expression = {
-  type = "BinaryOp",
-  left = {
-    type = "BinaryOp",
-    left = { type = "Column", "request_count" },
-    op = "MULTIPLY",
-    right = { type = "Literal", 100 }
-  },
-  op = "DIVIDE",
-  right = {
-    type = "Function",
-    name = "SUM",
-    args = [{ type = "Column", "request_count" }]
-  }
-}
+expression = { type = "BinaryOp", left = { type = "BinaryOp", left = { type = "Column", value= "request_count" }, op = "MULTIPLY", right = { type = "Literal", value=100 } }, op = "DIVIDE", right = { type = "Function", name = {"SUM" = { column= "request_count" }} } }
 ```
 
 ## 12. Endpoint Availability/Success Rate
@@ -339,35 +239,20 @@ expression = {
 [[operations]]
 type = "WithColumn"
 name = "is_success"
-expression = {
-  type = "BinaryOp",
-  left = { type = "Column", "status_code" },
-  op = "LT",
-  right = { type = "Literal", 400 }
-}
+expression = { type = "BinaryOp", left = { type = "Column", value ="status_code" }, op = "LT", right = { type = "Literal", value = 400 } }
 
 [[operations]]
 type = "GroupBy"
 columns = ["endpoint"]
 aggregate = [
-  { column = "request_id", function = "COUNT" },
-  { column = "is_success", function = "SUM" }
+  { column = "request_id", function = "COUNT", alias = "request_id_COUNT" },
+  { column = "is_success", function = "SUM", alias = "is_success_SUM" }
 ]
 
 [[operations]]
 type = "WithColumn"
 name = "availability"
-expression = {
-  type = "BinaryOp",
-  left = {
-    type = "BinaryOp",
-    left = { type = "Column", "is_success_SUM" },
-    op = "MULTIPLY",
-    right = { type = "Literal", 100 }
-  },
-  op = "DIVIDE",
-  right = { type = "Column", "request_id_COUNT" }
-}
+expression = { type = "BinaryOp", left = { type = "BinaryOp", left = { type = "Column", value = "is_success_SUM" }, op = "MULTIPLY", right = { type = "Literal",  value =100 } }, op = "DIVIDE", right = { type = "Column", value= "request_id_COUNT" } }
 ```
 
 ## 13. Error Types Distribution
@@ -375,21 +260,15 @@ expression = {
 ```toml
 [[operations]]
 type = "Filter"
-column = "status_code"
-condition = "GTE"
-filter = 400
+column = "is_error"
+condition = "EQ"
+filter = true
 
 [[operations]]
 type = "GroupBy"
-columns = ["error_type", "error_message"]
+columns = ["error_type"]
 aggregate = [
-  { column = "request_id", function = "COUNT" }
-]
-
-[[operations]]
-type = "Rename"
-mappings = [
-  { old_name = "request_id_COUNT", new_name = "error_count" }
+  { column = "request_id", function = "COUNT", alias = "error_count" }
 ]
 
 [[operations]]
@@ -405,49 +284,13 @@ limit = 10
 [[operations]]
 type = "WithColumn"
 name = "browser_type"
-expression = {
-  type = "Function",
-  name = "CONCAT",
-  args = [
-    {
-      type = "Conditional",
-      condition = {
-        type = "Function",
-        name = "CONCAT",
-        args = [
-          { type = "Column", "user_agent" },
-          { type = "Literal", "Chrome" }
-        ]
-      },
-      then = { type = "Literal", "Chrome" },
-      otherwise = {
-        type = "Conditional",
-        condition = {
-          type = "Function",
-          name = "CONCAT",
-          args = [
-            { type = "Column", "user_agent" },
-            { type = "Literal", "Firefox" }
-          ]
-        },
-        then = { type = "Literal", "Firefox" },
-        otherwise = { type = "Literal", "Other" }
-      }
-    }
-  ]
-}
+expression = { type = "Conditional", condition = { type = "Function", name = {"CONTAINS" = {column = "user_agent", value = "Chrome"}} }, then = { type = "Literal", value = "Chrome" }, otherwise = { type = "Conditional", condition = { type = "Function", name = {"CONTAINS" = {column = "user_agent", value = "Safari"}} }, then = { type = "Literal", value = "Safari" }, otherwise = { type = "Literal", value = "Other" } } }
 
 [[operations]]
 type = "GroupBy"
 columns = ["browser_type"]
 aggregate = [
-  { column = "request_id", function = "COUNT" }
-]
-
-[[operations]]
-type = "Rename"
-mappings = [
-  { old_name = "request_id_COUNT", new_name = "request_count" }
+  { column = "request_id", function = "COUNT", alias = "request_count" }
 ]
 ```
 
@@ -458,19 +301,12 @@ mappings = [
 type = "GroupByTime"
 time_column = "timestamp"
 every = 300
+timestamp_format = "%Y-%m-%dT%H:%M:%S%z"
 unit = "Seconds"
 aggregate = [
-  { column = "response_size", function = "MEAN" },
-  { column = "response_size", function = "MAX" },
-  { column = "response_size", function = "SUM" }
-]
-
-[[operations]]
-type = "Rename"
-mappings = [
-  { old_name = "response_size_MEAN", new_name = "avg_response_size" },
-  { old_name = "response_size_MAX", new_name = "max_response_size" },
-  { old_name = "response_size_SUM", new_name = "total_bandwidth" }
+  { column = "request_size_bytes", function = "MEAN" , alias = "avg_response_size"},
+  { column = "request_size_bytes", function = "MAX" , alias = "max_response_size"},
+  { column = "request_size_bytes", function = "SUM" , alias = "total_bandwidth"}
 ]
 ```
 
@@ -481,44 +317,24 @@ mappings = [
 type = "GroupByTime"
 time_column = "timestamp"
 every = 60
+timestamp_format = "%Y-%m-%dT%H:%M:%S%z"
 unit = "Seconds"
+additional_groups = ["endpoint"]
 aggregate = [
-  { column = "request_id", function = "COUNT" }
+  { column = "request_id", function = "COUNT", alias = "request_id_COUNT" }
 ]
 
 [[operations]]
+name = "average_requests"
 type = "Window"
 column = "request_id_COUNT"
-function = "RollingMean"
+function = {type = "rollingmean"}
+partition_by = ["endpoint"]
 window_size = 30  # 30-minute rolling average
 output_column = "average_requests"
+order_by = ["endpoint", "timestamp"]
 
 [[operations]]
 type = "WithColumn"
 name = "deviation"
-expression = {
-  type = "BinaryOp",
-  left = { type = "Column", "request_id_COUNT" },
-  op = "SUBTRACT",
-  right = { type = "Column", "average_requests" }
-}
-
-[[operations]]
-type = "WithColumn"
-name = "is_anomaly"
-expression = {
-  type = "BinaryOp",
-  left = {
-    type = "Function",
-    name = "ABS",
-    args = [{ type = "Column", "deviation" }]
-  },
-  op = "GT",
-  right = {
-    type = "BinaryOp",
-    left = { type = "Column", "average_requests" },
-    op = "MULTIPLY",
-    right = { type = "Literal", 0.3 }  # 30% threshold
-  }
-}
-```
+expression = { type = "BinaryOp", left = { type = "Column", value ="request_id_COUNT" }, op = "SUBTRACT", right = { type = "Column",value= "average_requests" } }
