@@ -425,13 +425,13 @@ fn readme_error_types_distribution() {
         r#"
 [[operations]]
 type = "Filter"
-column = "status_code"
-condition = "GTE"
-filter = 400
+column = "is_error"
+condition = "EQ"
+filter = true
 
 [[operations]]
 type = "GroupBy"
-columns = ["error_type", "error_message"]
+columns = ["error_type"]
 aggregate = [
   { column = "request_id", function = "COUNT", alias = "error_count" }
 ]
