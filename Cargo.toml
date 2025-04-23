@@ -37,7 +37,7 @@ tracing = "0.1.41"
 chrono = { version = "*", features = ["serde"] }
 tracing-subscriber = { version = "0.3.19", features = ["fmt", "ansi"] }
 
-rand = "*"
+rand = "0.9"
 rand_distr = "*"
 uuid = { version = "1.0", features = ["v4"] }
 serde_json = "*"
