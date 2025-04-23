@@ -334,20 +334,12 @@ timestamp_format = "%Y-%m-%dT%H:%M:%S%z"
 unit = "Seconds"
 additional_groups = ["endpoint"]
 aggregate = [
-  { column = "response_time_ms", function = "MEDIAN", alias="p50"}
+  { column = "response_time_ms", function = "MEDIAN", alias="p50"},
+  { column = "response_time_ms", function = {"PERCENTILE" =  0.99}, alias="p99"},
+  { column = "response_time_ms", function = {"PERCENTILE" = 0.95}, alias="p95"},
+  { column = "request_id", function = "COUNT", alias = "request_count" }
 ]
 
-[[operations]]
-type = "GroupBy"
-columns = ["endpoint"]
-aggregate = [
-  { column = "response_time_ms", function = "MEAN" },
-  { column = "response_time_ms", function = "MEDIAN" }
-]
-
-# Note: For P95 and P99, we'd typically use quantile functions
-# which aren't directly represented in the current schema but
-# could be added as extensions to AllowedGroupFunction
 "#,
     );
     let input = setup_test_logs();

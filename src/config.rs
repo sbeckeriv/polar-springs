@@ -1,4 +1,7 @@
-use polars::prelude::{col, lit, when, DataType, Expr, RollingOptionsFixedWindow, NULL};
+use polars::prelude::{
+    col, lit, when, DataType, Expr, InterpolationMethod, QuantileMethod, RollingOptionsFixedWindow,
+    NULL,
+};
 use serde::Deserialize;
 
 #[derive(Deserialize, Debug)]
@@ -255,6 +258,7 @@ pub enum AllowedGroupFunction {
     FIRST,
     LAST,
     NUNIQUE,
+    PERCENTILE(f64),
 }
 
 #[derive(Deserialize, Debug)]
@@ -283,6 +287,10 @@ pub enum Expression {
 
 #[derive(Deserialize, Debug)]
 pub enum ExpressionFunction {
+    PERCENTILE {
+        column: String,
+        percentile: f64,
+    },
     CONCAT {
         column1: String,
         column2: String,
@@ -411,6 +419,9 @@ impl Aggregate {
             AllowedGroupFunction::FIRST => col.first(),
             AllowedGroupFunction::LAST => col.last(),
             AllowedGroupFunction::NUNIQUE => col.n_unique(),
+            AllowedGroupFunction::PERCENTILE(percentile) => {
+                col.quantile(lit(percentile), QuantileMethod::Nearest)
+            }
         };
 
         let col = if let Some(alias) = &self.alias {
@@ -590,13 +601,15 @@ impl Expression {
                     ExpressionFunction::CONTAINS { column, value } => {
                         Ok(col(column).str().contains_literal(lit(value.clone())))
                     }
-
                     ExpressionFunction::REGEX_MATCH { column, pattern } => {
                         Ok(col(column).str().contains(lit(pattern.clone()), true))
                     }
                     ExpressionFunction::FLOOR { column } => Ok(col(column).floor()),
                     ExpressionFunction::CEIL { column } => Ok(col(column).ceil()),
                     ExpressionFunction::SQRT { column } => Ok(col(column).sqrt()),
+                    ExpressionFunction::PERCENTILE { column, percentile } => {
+                        Ok(col(column).quantile(lit(*percentile), QuantileMethod::Nearest))
+                    }
                 }
             }
 
