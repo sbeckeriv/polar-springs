@@ -380,7 +380,7 @@ pub enum ExpressionFunction {
         column: String,
         value: String,
     },
-    REGEX_MATCH {
+    REGEXMATCH {
         column: String,
         pattern: String,
     },
@@ -601,7 +601,7 @@ impl Expression {
                     ExpressionFunction::CONTAINS { column, value } => {
                         Ok(col(column).str().contains_literal(lit(value.clone())))
                     }
-                    ExpressionFunction::REGEX_MATCH { column, pattern } => {
+                    ExpressionFunction::REGEXMATCH { column, pattern } => {
                         Ok(col(column).str().contains(lit(pattern.clone()), true))
                     }
                     ExpressionFunction::FLOOR { column } => Ok(col(column).floor()),

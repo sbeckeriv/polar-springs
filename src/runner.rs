@@ -2,28 +2,12 @@ use crate::config::{self, Config};
 
 use polars::prelude::*;
 use polars_io::avro::AvroReader;
-use toml::Deserializer;
-
-use std::fs;
 use tracing::{error, info};
 
-pub fn run(
-    config_path: String,
-    input_path: String,
-) -> Result<DataFrame, Box<dyn std::error::Error>> {
+pub fn run(config: Config, input_path: String) -> Result<DataFrame, Box<dyn std::error::Error>> {
     // Placeholder for TOML parsing and Polars logic
-    info!("Parsing TOML configuration from: {}", config_path);
     info!("Processing input data from: {}", input_path);
 
-    // Parse the TOML configuration file
-    let config_content = fs::read_to_string(&config_path)?;
-    let d = Deserializer::new(&config_content);
-    let config = serde_path_to_error::deserialize(d).inspect_err(|err| {
-        let path = err.path().to_string();
-        error!("Failed to parse TOML configuration: {err} {path}");
-    })?;
-
-    info!("Parsed configuration: {:?}", config);
     let file = std::fs::File::open(&input_path)?;
     // Load the input data into a Polars DataFrame
     let mut df = match input_path.to_lowercase().split(".").last() {
