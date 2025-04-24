@@ -687,6 +687,7 @@ impl Operation {
                 name,
             } => {
                 let partition_exprs: Vec<Expr> = partition_by.iter().map(col).collect();
+
                 // Configure window function with appropriate options
                 let window_expr = match function {
                     WindowFunction::Sum => col(column).sum().over(partition_exprs.clone()),
