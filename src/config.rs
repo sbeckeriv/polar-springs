@@ -1,5 +1,5 @@
 use polars::prelude::{
-    col, lit, when, DataType, Expr, InterpolationMethod, QuantileMethod, RollingOptionsFixedWindow,
+    col, lit, when, DataType, Expr, QuantileMethod, RollingOptionsFixedWindow,
     NULL,
 };
 use serde::Deserialize;

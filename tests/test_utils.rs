@@ -1,10 +1,6 @@
 use ploars_cli::config::Config;
-use ploars_cli::runner::run;
-use serde_path_to_error::Error as PathError;
-use std::fs;
 use std::path::Path;
 use std::sync::Once;
-use toml::de::Error as TomlError;
 
 /// Parse a TOML config string into a Config struct, panicking with detailed error info on failure.
 pub fn parse_config_str(s: &str) -> Config {

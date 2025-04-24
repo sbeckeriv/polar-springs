@@ -1,5 +1,4 @@
 mod test_utils;
-use test_utils::parse_config_str;
 
 config_string_test!(
     window_sum,
