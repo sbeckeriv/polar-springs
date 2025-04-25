@@ -82,13 +82,15 @@ fn operations(df: LazyFrame, config: &Config) -> Result<LazyFrame, Box<dyn std::
                     df = df.limit(*limit as u32);
                 }
             }
-            config::Operation::GroupByDynamic { columns, aggregate } => todo!(),
-            config::Operation::Join {
-                right_df,
+            config::Operation::SelfJoin {
                 left_on,
                 right_on,
                 how,
-            } => todo!(),
+            } => {
+                let left = left_on.iter().map(|s| col(s)).collect::<Vec<_>>();
+                let right = right_on.iter().map(|s| col(s)).collect::<Vec<_>>();
+                df = df.clone().join(df, left, right, JoinArgs::new(how.into()));
+            }
             config::Operation::WithColumn { name, expression } => {
                 let mut expression = expression.to_polars_expr()?;
                 if let Some(name) = name {

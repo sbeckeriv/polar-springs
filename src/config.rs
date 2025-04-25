@@ -1,6 +1,5 @@
 use polars::prelude::{
-    col, lit, when, DataType, Expr, QuantileMethod, RollingOptionsFixedWindow,
-    NULL,
+    col, lit, when, DataType, Expr, QuantileMethod, RollingOptionsFixedWindow, NULL,
 };
 use serde::Deserialize;
 
@@ -39,10 +38,6 @@ pub enum Operation {
         aggregate: Vec<Aggregate>,
     },
 
-    GroupByDynamic {
-        columns: Vec<String>,
-        aggregate: Vec<Aggregate>,
-    },
     GroupByTime {
         time_column: String,
         every: u32,
@@ -61,8 +56,7 @@ pub enum Operation {
         limit: Option<u32>,
     },
     // support more then one input..
-    Join {
-        right_df: String,
+    SelfJoin {
         left_on: Vec<String>,
         right_on: Vec<String>,
         how: JoinType,
@@ -232,10 +226,21 @@ pub enum JoinType {
     Inner,
     Left,
     Right,
-    Outer,
     Cross,
     Semi,
     Anti,
+}
+impl Into<polars::prelude::JoinType> for &JoinType {
+    fn into(self) -> polars::prelude::JoinType {
+        match self {
+            JoinType::Inner => polars::prelude::JoinType::Inner,
+            JoinType::Left => polars::prelude::JoinType::Left,
+            JoinType::Right => polars::prelude::JoinType::Right,
+            JoinType::Cross => polars::prelude::JoinType::Cross,
+            JoinType::Semi => polars::prelude::JoinType::Semi,
+            JoinType::Anti => polars::prelude::JoinType::Anti,
+        }
+    }
 }
 
 #[derive(Deserialize, Debug)]
