@@ -108,32 +108,6 @@ columns = ["timestamp", "total_processing_time",  "endpoint", "status_code", "re
 );
 
 config_string_test!(
-    pivot,
-    r#"
-[[operations]]
-type = "Pivot"
-index = ["geo_region"]
-columns = "service_name"
-values = "response_time_ms"
-aggregate_function = "MEAN"
-"#
-);
-
-config_string_test!(
-    pivot_advanced,
-    r#"
-[[operations]]
-type = "PivotAdvanced"
-index = ["geo_region", "endpoint"]
-columns = "service_name"
-values = [
-  { column = "response_time_ms", function = "MEAN" },
-  { column = "cpu_utilization", function = "MAX" }
-]
-"#
-);
-
-config_string_test!(
     window_cumsum,
     r#"
 [[operations]]

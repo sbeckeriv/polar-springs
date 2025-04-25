@@ -146,23 +146,6 @@ output_column = "p90_response_time"
 );
 
 config_string_test!(
-    readme_latency_heatmap_by_hour_and_endpoint,
-    r#"
-[[operations]]
-type = "WithColumn" 
-name = "hour_of_day"
-expression = { type = "Function", name = {HOUR =  { column ="timestamp", timestamp_format = "%Y-%m-%dT%H:%M:%S%z" } } }
-
-[[operations]]
-type = "Pivot"
-index = ["endpoint"]
-columns = "hour_of_day"
-values = "response_time"
-aggregate_function = "MEAN"
-"#
-);
-
-config_string_test!(
     readme_throughput_requests_per_second,
     r#"
 [[operations]]

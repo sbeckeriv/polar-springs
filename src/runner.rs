@@ -98,14 +98,6 @@ fn operations(df: LazyFrame, config: &Config) -> Result<LazyFrame, Box<dyn std::
                 }
                 df = df.with_column(expression);
             }
-            config::Operation::Pivot {
-                index,
-                columns,
-                values,
-                aggregate_function,
-            } => {
-                // how do i use pivot?
-            }
             config::Operation::Rename { mappings } => {
                 let mut rename_old = Vec::new();
                 let mut rename_new = Vec::new();
@@ -114,23 +106,6 @@ fn operations(df: LazyFrame, config: &Config) -> Result<LazyFrame, Box<dyn std::
                     rename_new.push(&mapping.new_name);
                 }
                 df = df.rename(rename_old, rename_new, false);
-            }
-            config::Operation::PivotAdvanced { index, values, .. } => {
-                // Create a dictionary of value column -> aggregation function
-                let mut agg_exprs: Vec<Expr> = Vec::new();
-                for agg in values {
-                    agg_exprs.push(agg.to_polars_expr()?);
-                }
-
-                // Build the pivot operation
-                let pivot_expr = df
-                    .clone()
-                    .lazy()
-                    .group_by(index.iter().map(col).collect::<Vec<_>>())
-                    .agg(agg_exprs)
-                    .collect()?;
-
-                df = pivot_expr.lazy();
             }
             config::Operation::Window { .. } => {
                 df = df.lazy().with_column(operation.to_polars_expr()?);

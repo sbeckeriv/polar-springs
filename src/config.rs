@@ -67,18 +67,6 @@ pub enum Operation {
         expression: Expression,
     },
 
-    Pivot {
-        index: Vec<String>,
-        columns: String,
-        values: String,
-        aggregate_function: AllowedGroupFunction,
-    },
-    PivotAdvanced {
-        index: Vec<String>,     // Column(s) to use as index/row labels
-        columns: String,        // Column whose values will become new columns
-        values: Vec<Aggregate>, // Columns with values and their aggregation functions
-    },
-
     Window {
         column: String,            // Column to apply the function to
         function: WindowFunction,  // Window function to apply

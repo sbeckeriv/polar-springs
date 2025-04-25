@@ -148,7 +148,7 @@ output_column = "p90_response_time"
 type = "WithColumn" 
 name = "hour_of_day"
 expression = { type = "Function", name = {HOUR =  { column ="timestamp", timestamp_format = "%Y-%m-%dT%H:%M:%S%z" } } }
-
+//no pivot
 [[operations]]
 type = "Pivot"
 index = ["endpoint"]
