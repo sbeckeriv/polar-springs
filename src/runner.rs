@@ -140,9 +140,9 @@ pub fn dataframe_from_file(input_path: &str) -> Result<LazyFrame, Box<dyn std::e
                 }
             }
 
+            reader.rewind()?;
             match first_char {
                 Some('{') => {
-                    reader.rewind()?;
                     let sample_data: Vec<String> =
                         reader.lines().take(10_000).filter_map(Result::ok).collect();
 
@@ -163,7 +163,7 @@ pub fn dataframe_from_file(input_path: &str) -> Result<LazyFrame, Box<dyn std::e
                 }
                 // can you rewrite the file to remove the [] and commas at the end of the line?
                 // can rewrite logic to inlcude schema precheck here as well.
-                Some('[') => JsonReader::new(file).finish()?.lazy(),
+                Some('[') => JsonReader::new(reader).finish()?.lazy(),
                 _ => {
                     error!("Unsupported JSON format. Expected either object or array.");
                     return Err("Unsupported JSON format".into());
