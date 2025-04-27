@@ -24,7 +24,12 @@ polars-io = { version = "*", features = [
     "parquet",
     "ipc",
     "avro",
+    "cloud",
+    "aws",
+    "gcp",
+    "azure",
 ] }
+
 polars-core = "*"
 serde = { version = "1.0", features = ["derive"] }
 serde_path_to_error = "0"

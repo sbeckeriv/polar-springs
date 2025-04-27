@@ -32,7 +32,12 @@ macro_rules! config_string_test {
             let config = $config;
             let input = test_utils::setup_test_logs();
 
-            let result = polars_cli::runner::run(test_utils::parse_config_str(config), input);
+            let result = polars_cli::runner::run(
+                test_utils::parse_config_str(config),
+                input,
+                "jsonl".to_string(),
+                false,
+            );
             assert!(
                 result.is_ok(),
                 "{} operation failed: {}",

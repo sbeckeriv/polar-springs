@@ -28,6 +28,6 @@ filter = 400
 "#;
     let input = setup_test_logs();
 
-    let result = run(parse_config_str(config), input);
+    let result = run(parse_config_str(config), input, "json".to_string(), false);
     assert!(result.is_ok(), "Filter operation failed");
 }

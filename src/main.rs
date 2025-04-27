@@ -12,13 +12,21 @@ struct Cli {
     #[clap(short, long)]
     config: String,
 
-    /// Path to the input data stream (e.g., file path)
-    #[clap(short, long)]
-    input: String,
-
     /// Only parse the config and exit if successful
     #[clap(long)]
     parse: bool,
+
+    /// csv, jsonl (json per line), json (array of json), parquet, avro
+    #[clap(long)]
+    file_format: String,
+
+    /// Path to the input data stream (e.g., file path)
+    #[clap(short, long)]
+    local_input: Option<String>,
+
+    /// Cloud provider url (e.g., s3, gcs, azure)
+    #[clap(long)]
+    cloud_provider: Option<String>,
 }
 
 fn main() {
@@ -28,6 +36,8 @@ fn main() {
     let cli = Cli::parse();
 
     info!("Parsing TOML configuration from: {}", cli.config);
+
+    // Pass cloud_options to runner::run or use as needed
     let config_content = match fs::read_to_string(&cli.config) {
         Ok(content) => content,
         Err(e) => {
@@ -50,12 +60,14 @@ fn main() {
     if cli.parse {
         std::process::exit(0);
     } else {
-        info!(
-            "Starting the CLI with config: {} and input: {}",
-            cli.config, cli.input
-        );
-
-        if let Err(e) = run(config, cli.input) {
+        if let Err(e) = run(
+            config,
+            cli.local_input
+                .or_else(|| cli.cloud_provider.clone())
+                .expect("Either local_input or cloud_provider must be provided"),
+            cli.file_format,
+            cli.cloud_provider.is_some(),
+        ) {
             error!("Application error: {}", e);
             std::process::exit(1);
         }

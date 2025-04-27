@@ -1,11 +1,10 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use polars::prelude::*;
 use polars_cli::config::Config;
 use polars_cli::runner::{dataframe_from_file, process_dataframe};
 
 fn bench_process_dataframe(c: &mut Criterion) {
     let file = "expanded_big_test.json";
-    let df = dataframe_from_file(&file)
+    let df = dataframe_from_file(&file, "jsonl", false)
         .expect("Failed to read file: expaned_big_test.json run `just` to generate it");
 
     let s = r#"

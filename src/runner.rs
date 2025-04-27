@@ -1,17 +1,14 @@
 use std::{
     fs::{self, File},
-    io::{BufRead, BufReader, Read, Seek},
+    io::{BufRead, BufReader},
 };
 
 use crate::config::{self, Config};
 
 use polars::prelude::*;
 use polars_io::avro::AvroReader;
-use serde::de::IntoDeserializer;
 use tracing::{error, info};
 
-/// Pure transformation logic for benchmarking and testing.
-/// Applies config operations to a LazyFrame without logging or collect.
 pub fn process_dataframe(
     mut df: LazyFrame,
     config: &Config,
@@ -64,14 +61,6 @@ pub fn process_dataframe(
                 df = df.clone().join(df, left, right, JoinArgs::new(how.into()));
             }
             config::Operation::WithColumn { name, expression } => {
-                fn operations(
-                    df: LazyFrame,
-                    config: &Config,
-                ) -> Result<LazyFrame, Box<dyn std::error::Error>> {
-                    info!("Applying operations from config");
-                    let df = process_dataframe(df, config)?;
-                    Ok(df)
-                }
                 let mut expression = expression.to_polars_expr()?;
                 if let Some(name) = name {
                     expression = expression.alias(name);
@@ -117,73 +106,64 @@ pub fn process_dataframe(
     }
     Ok(df)
 }
-pub fn dataframe_from_file(input_path: &str) -> Result<LazyFrame, Box<dyn std::error::Error>> {
+pub fn dataframe_from_file(
+    input_path: &str,
+    file_format: &str,
+    is_cloud: bool,
+) -> Result<LazyFrame, Box<dyn std::error::Error>> {
     info!("Processing input data from: {}", input_path);
 
     let file = std::fs::File::open(&input_path)?;
     // Load the input data into a Polars DataFrame
-    let df = match input_path.to_lowercase().split(".").last() {
-        Some("csv") => LazyCsvReader::new(input_path).finish()?.lazy(),
-        Some("json") => {
+    let df = match (file_format, is_cloud) {
+        ("csv", _) => LazyCsvReader::new(input_path).finish()?.lazy(),
+        ("jsonl", false) => {
             let sample_file = std::fs::File::open(&input_path)?;
-            let mut reader = BufReader::new(sample_file);
-            let mut buffer = [0u8; 1];
-            let mut first_char = None;
-            loop {
-                reader.read_exact(&mut buffer)?;
-                let c = buffer[0] as char;
+            let reader = BufReader::new(sample_file);
+            let sample_data: Vec<String> =
+                reader.lines().take(10_000).filter_map(Result::ok).collect();
 
-                // Skip whitespace characters
-                if !c.is_whitespace() {
-                    first_char = Some(c);
-                    break;
-                }
-            }
+            let pid = std::process::id();
+            let schema_sample = format!("schema_sample_{}.json", pid);
+            std::fs::write(&schema_sample, sample_data.join("\n"))?;
 
-            reader.rewind()?;
-            match first_char {
-                Some('{') => {
-                    let sample_data: Vec<String> =
-                        reader.lines().take(10_000).filter_map(Result::ok).collect();
+            let df_sample = JsonLineReader::new(File::open(&schema_sample)?)
+                .infer_schema_len(Some(10_000.try_into().expect("always not 0")))
+                .finish()?;
+            fs::remove_file(schema_sample)?;
 
-                    let pid = std::process::id();
-                    let schema_sample = format!("schema_sample_{}.json", pid);
-                    std::fs::write(&schema_sample, sample_data.join("\n"))?;
+            let schema = df_sample.schema();
 
-                    let df_sample = JsonLineReader::new(File::open(&schema_sample)?)
-                        .infer_schema_len(Some(10_000.try_into().expect("always not 0")))
-                        .finish()?;
-                    fs::remove_file(schema_sample)?;
-
-                    let schema = df_sample.schema();
-                    LazyJsonLineReader::new(input_path)
-                        .with_schema(Some(schema.clone()))
-                        .finish()?
-                        .lazy()
-                }
-                // can you rewrite the file to remove the [] and commas at the end of the line?
-                // can rewrite logic to inlcude schema precheck here as well.
-                Some('[') => JsonReader::new(reader).finish()?.lazy(),
-                _ => {
-                    error!("Unsupported JSON format. Expected either object or array.");
-                    return Err("Unsupported JSON format".into());
-                }
-            }
+            LazyJsonLineReader::new(input_path)
+                .with_schema(Some(schema.clone()))
+                .finish()?
+                .lazy()
         }
-        Some("parquet") => ParquetReader::new(file).finish()?.lazy(),
-        Some("ipc") => IpcReader::new(file).finish()?.lazy(),
-        Some("avro") => AvroReader::new(file).finish()?.lazy(),
+        ("jsonl", true) => LazyJsonLineReader::new(input_path).finish()?.lazy(),
+        ("json", _) => JsonReader::new(file).finish()?.lazy(),
+        ("parquet", false) => LazyFrame::scan_parquet(input_path, Default::default())?,
+        ("ipc", false) => LazyFrame::scan_ipc(input_path, Default::default())?,
+        ("avro", false) => AvroReader::new(file).finish()?.lazy(),
         _ => {
             error!(
                 "Unsupported file format. Supported formats are: csv, json, parquet, ipc, avro."
             );
-            return Err("Unsupported file format".into());
+            return Err(format!(
+                "Unsupported file format and cloud {file_format} in the cloud {is_cloud}"
+            )
+            .into());
         }
     };
     Ok(df)
 }
-pub fn run(config: Config, input_path: String) -> Result<DataFrame, Box<dyn std::error::Error>> {
-    let mut df = dataframe_from_file(&input_path)?;
+
+pub fn run(
+    config: Config,
+    input_path: String,
+    file_format: String,
+    is_cloud: bool,
+) -> Result<DataFrame, Box<dyn std::error::Error>> {
+    let mut df = dataframe_from_file(&input_path, &file_format, is_cloud)?;
     df = operations(df, &config)?;
 
     let df = df.collect()?;
