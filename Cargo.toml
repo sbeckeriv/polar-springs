@@ -9,7 +9,7 @@ path = "src/main.rs"
 
 # This section defines the library
 [lib]
-name = "ploars_cli"
+name = "polars_cli"
 path = "src/lib.rs"
 
 
@@ -41,3 +41,10 @@ rand = "0.9"
 rand_distr = "*"
 uuid = { version = "1.0", features = ["v4"] }
 serde_json = "*"
+
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "benchmark"
+harness = false

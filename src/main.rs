@@ -1,6 +1,6 @@
 use clap::Parser;
 use clap_derive::Parser;
-use ploars_cli::runner::run;
+use polars_cli::runner::run;
 use std::fs;
 use toml::Deserializer;
 use tracing::{error, info};
@@ -37,7 +37,7 @@ fn main() {
     };
     let d = Deserializer::new(&config_content);
     let config;
-    match serde_path_to_error::deserialize::<_, ploars_cli::config::Config>(d) {
+    match serde_path_to_error::deserialize::<_, polars_cli::config::Config>(d) {
         Ok(config_content) => {
             config = config_content;
         }

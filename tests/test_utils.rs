@@ -1,4 +1,4 @@
-use ploars_cli::config::Config;
+use polars_cli::config::Config;
 use std::path::Path;
 use std::sync::Once;
 
@@ -32,7 +32,7 @@ macro_rules! config_string_test {
             let config = $config;
             let input = test_utils::setup_test_logs();
 
-            let result = ploars_cli::runner::run(test_utils::parse_config_str(config), input);
+            let result = polars_cli::runner::run(test_utils::parse_config_str(config), input);
             assert!(
                 result.is_ok(),
                 "{} operation failed: {}",

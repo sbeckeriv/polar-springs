@@ -1,4 +1,4 @@
-use ploars_cli::runner::run;
+use polars_cli::runner::run;
 use std::path::Path;
 use std::sync::Once;
 

@@ -1,46 +1,27 @@
+use std::{
+    fs::{self, File},
+    io::{BufRead, BufReader, Read, Seek},
+};
+
 use crate::config::{self, Config};
 
 use polars::prelude::*;
 use polars_io::avro::AvroReader;
+use serde::de::IntoDeserializer;
 use tracing::{error, info};
 
-pub fn run(config: Config, input_path: String) -> Result<DataFrame, Box<dyn std::error::Error>> {
-    // Placeholder for TOML parsing and Polars logic
-    info!("Processing input data from: {}", input_path);
-
-    let file = std::fs::File::open(&input_path)?;
-    // Load the input data into a Polars DataFrame
-    let mut df = match input_path.to_lowercase().split(".").last() {
-        Some("csv") => CsvReader::new(file).finish()?.lazy(),
-        Some("json") => JsonLineReader::new(file).finish()?.lazy(),
-        Some("parquet") => ParquetReader::new(file).finish()?.lazy(),
-        Some("ipc") => IpcReader::new(file).finish()?.lazy(),
-        Some("avro") => AvroReader::new(file).finish()?.lazy(),
-        _ => {
-            error!(
-                "Unsupported file format. Supported formats are: csv, json, parquet, ipc, avro."
-            );
-            return Err("Unsupported file format".into());
-        }
-    };
-    df = operations(df, &config)?;
-
-    let df = df.collect()?;
-    info!("Final DataFrame:\n{}", df);
-
-    Ok(df)
-}
-
-fn operations(df: LazyFrame, config: &Config) -> Result<LazyFrame, Box<dyn std::error::Error>> {
-    let mut df = df;
-    // Apply operations from the configuration
+/// Pure transformation logic for benchmarking and testing.
+/// Applies config operations to a LazyFrame without logging or collect.
+pub fn process_dataframe(
+    mut df: LazyFrame,
+    config: &Config,
+) -> Result<LazyFrame, Box<dyn std::error::Error>> {
     for operation in &config.operations {
         match operation {
             config::Operation::Filter { .. } => {
                 df = df.filter(operation.to_polars_expr()?);
             }
             config::Operation::Select { columns } => {
-                info!("Selecting columns: {:?}", columns);
                 let columns: Vec<_> = columns
                     .iter()
                     .map(|s: &String| col(s.to_string()))
@@ -60,23 +41,14 @@ fn operations(df: LazyFrame, config: &Config) -> Result<LazyFrame, Box<dyn std::
                 order,
                 limit,
             } => {
-                info!(
-                    "Sorting by column '{}' in '{}' order {:?}",
-                    column, order, limit
-                );
                 let reverse = order.to_lowercase() == "desc";
                 let sort_options = polars::prelude::SortMultipleOptions {
                     descending: [reverse].into(),
                     nulls_last: [true].into(),
-                    limit: None, // limit here is a panic if set. apply limit after.
+                    limit: None,
                     maintain_order: true,
                     multithreaded: true,
                 };
-
-                info!(
-                    "Sorting by column '{}' in '{}' order {:?}  {:?}",
-                    column, order, limit, sort_options
-                );
                 df = df.sort([column], sort_options);
                 if let Some(limit) = limit {
                     df = df.limit(*limit as u32);
@@ -92,6 +64,14 @@ fn operations(df: LazyFrame, config: &Config) -> Result<LazyFrame, Box<dyn std::
                 df = df.clone().join(df, left, right, JoinArgs::new(how.into()));
             }
             config::Operation::WithColumn { name, expression } => {
+                fn operations(
+                    df: LazyFrame,
+                    config: &Config,
+                ) -> Result<LazyFrame, Box<dyn std::error::Error>> {
+                    info!("Applying operations from config");
+                    let df = process_dataframe(df, config)?;
+                    Ok(df)
+                }
                 let mut expression = expression.to_polars_expr()?;
                 if let Some(name) = name {
                     expression = expression.alias(name);
@@ -119,14 +99,9 @@ fn operations(df: LazyFrame, config: &Config) -> Result<LazyFrame, Box<dyn std::
             } => {
                 let time_bucket_col = output_column.clone().unwrap_or_else(|| time_column.clone());
                 let truncate_expr = operation.to_polars_expr()?;
-                // Create a DataFrame with the time bucket
                 let df_with_bucket = df.clone().lazy().with_column(truncate_expr).collect()?;
-
-                // Build the group by columns (time bucket + additional groups)
                 let mut group_cols = vec![time_bucket_col.as_str()];
                 group_cols.extend(additional_groups.iter().map(|s| s.as_str()));
-
-                // Prepare the aggregation expressions
                 let agg_exprs = aggregate
                     .iter()
                     .flat_map(|agg| agg.to_polars_expr())
@@ -140,5 +115,85 @@ fn operations(df: LazyFrame, config: &Config) -> Result<LazyFrame, Box<dyn std::
             }
         }
     }
+    Ok(df)
+}
+pub fn dataframe_from_file(input_path: &str) -> Result<LazyFrame, Box<dyn std::error::Error>> {
+    info!("Processing input data from: {}", input_path);
+
+    let file = std::fs::File::open(&input_path)?;
+    // Load the input data into a Polars DataFrame
+    let df = match input_path.to_lowercase().split(".").last() {
+        Some("csv") => LazyCsvReader::new(input_path).finish()?.lazy(),
+        Some("json") => {
+            let sample_file = std::fs::File::open(&input_path)?;
+            let mut reader = BufReader::new(sample_file);
+            let mut buffer = [0u8; 1];
+            let mut first_char = None;
+            loop {
+                reader.read_exact(&mut buffer)?;
+                let c = buffer[0] as char;
+
+                // Skip whitespace characters
+                if !c.is_whitespace() {
+                    first_char = Some(c);
+                    break;
+                }
+            }
+
+            match first_char {
+                Some('{') => {
+                    reader.rewind()?;
+                    let sample_data: Vec<String> =
+                        reader.lines().take(10_000).filter_map(Result::ok).collect();
+
+                    let pid = std::process::id();
+                    let schema_sample = format!("schema_sample_{}.json", pid);
+                    std::fs::write(&schema_sample, sample_data.join("\n"))?;
+
+                    let df_sample = JsonLineReader::new(File::open(&schema_sample)?)
+                        .infer_schema_len(Some(10_000.try_into().expect("always not 0")))
+                        .finish()?;
+                    fs::remove_file(schema_sample)?;
+
+                    let schema = df_sample.schema();
+                    LazyJsonLineReader::new(input_path)
+                        .with_schema(Some(schema.clone()))
+                        .finish()?
+                        .lazy()
+                }
+                // can you rewrite the file to remove the [] and commas at the end of the line?
+                // can rewrite logic to inlcude schema precheck here as well.
+                Some('[') => JsonReader::new(file).finish()?.lazy(),
+                _ => {
+                    error!("Unsupported JSON format. Expected either object or array.");
+                    return Err("Unsupported JSON format".into());
+                }
+            }
+        }
+        Some("parquet") => ParquetReader::new(file).finish()?.lazy(),
+        Some("ipc") => IpcReader::new(file).finish()?.lazy(),
+        Some("avro") => AvroReader::new(file).finish()?.lazy(),
+        _ => {
+            error!(
+                "Unsupported file format. Supported formats are: csv, json, parquet, ipc, avro."
+            );
+            return Err("Unsupported file format".into());
+        }
+    };
+    Ok(df)
+}
+pub fn run(config: Config, input_path: String) -> Result<DataFrame, Box<dyn std::error::Error>> {
+    let mut df = dataframe_from_file(&input_path)?;
+    df = operations(df, &config)?;
+
+    let df = df.collect()?;
+    info!("Final DataFrame:\n{}", df);
+
+    Ok(df)
+}
+
+fn operations(df: LazyFrame, config: &Config) -> Result<LazyFrame, Box<dyn std::error::Error>> {
+    info!("Applying operations from config");
+    let df = process_dataframe(df, config)?;
     Ok(df)
 }
