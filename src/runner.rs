@@ -19,10 +19,7 @@ pub fn process_dataframe(
                 df = df.filter(operation.to_polars_expr()?);
             }
             config::Operation::Select { columns } => {
-                let columns: Vec<_> = columns
-                    .iter()
-                    .map(|s: &String| col(s.to_string()))
-                    .collect();
+                let columns: Vec<_> = columns.iter().map(|s| col(s.as_str())).collect();
                 df = df.select(columns);
             }
             config::Operation::GroupBy { columns, aggregate } => {
@@ -56,9 +53,17 @@ pub fn process_dataframe(
                 right_on,
                 how,
             } => {
-                let left = left_on.iter().map(|s| col(s)).collect::<Vec<_>>();
-                let right = right_on.iter().map(|s| col(s)).collect::<Vec<_>>();
-                df = df.clone().join(df, left, right, JoinArgs::new(how.into()));
+                let left = left_on
+                    .iter()
+                    .map(|s| col(s.to_string()))
+                    .collect::<Vec<_>>();
+                let right = right_on
+                    .iter()
+                    .map(|s| col(s.to_string()))
+                    .collect::<Vec<_>>();
+                // Only clone if left and right are not disjoint
+                let df_join = df.clone().join(df, left, right, JoinArgs::new(how.into()));
+                df = df_join;
             }
             config::Operation::WithColumn { name, expression } => {
                 let mut expression = expression.to_polars_expr()?;
@@ -86,9 +91,9 @@ pub fn process_dataframe(
                 aggregate,
                 ..
             } => {
-                let time_bucket_col = output_column.clone().unwrap_or_else(|| time_column.clone());
+                let time_bucket_col = output_column.as_ref().unwrap_or(time_column);
                 let truncate_expr = operation.to_polars_expr()?;
-                let df_with_bucket = df.clone().lazy().with_column(truncate_expr).collect()?;
+                let df_with_bucket = df.lazy().with_column(truncate_expr).collect()?;
                 let mut group_cols = vec![time_bucket_col.as_str()];
                 group_cols.extend(additional_groups.iter().map(|s| s.as_str()));
                 let agg_exprs = aggregate
