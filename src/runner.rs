@@ -1,3 +1,4 @@
+use crate::config::{self, Config};
 use polars::prelude::*;
 use polars_io::avro::AvroReader;
 use std::{
@@ -6,12 +7,10 @@ use std::{
 };
 use tracing::{error, info};
 
-use crate::config::{self, Config};
-
 #[derive(Debug)]
 pub enum RunnerError {
     Polars(polars::error::PolarsError),
-    Io(std::io::Error),
+    Io(String),
     Other(String),
 }
 impl std::fmt::Display for RunnerError {
@@ -31,7 +30,7 @@ impl From<polars::error::PolarsError> for RunnerError {
 }
 impl From<std::io::Error> for RunnerError {
     fn from(e: std::io::Error) -> Self {
-        RunnerError::Io(e)
+        RunnerError::Io(e.to_string())
     }
 }
 impl From<String> for RunnerError {
@@ -44,7 +43,11 @@ pub fn process_dataframe(mut df: LazyFrame, config: &Config) -> Result<LazyFrame
     for operation in &config.operations {
         match operation {
             config::Operation::Filter { .. } => {
-                df = df.filter(operation.to_polars_expr().map_err(RunnerError::Other)?);
+                df = df.filter(operation.to_polars_expr().map_err(|e| {
+                    RunnerError::Other(format!(
+                        "Could not convert filter in to expression {operation:?} - {e}"
+                    ))
+                })?);
             }
             config::Operation::Select { columns } => {
                 let columns: Vec<_> = columns.iter().map(|s| col(s.as_str())).collect();
@@ -94,7 +97,11 @@ pub fn process_dataframe(mut df: LazyFrame, config: &Config) -> Result<LazyFrame
                 df = df_join;
             }
             config::Operation::WithColumn { name, expression } => {
-                let mut expression = expression.to_polars_expr().map_err(RunnerError::Other)?;
+                let mut expression = expression.to_polars_expr().map_err(|e| {
+                    RunnerError::Other(format!(
+                        "Could not convert withcolumn in to expression {operation:?} - {e}"
+                    ))
+                })?;
                 if let Some(name) = name {
                     expression = expression.alias(name);
                 }
@@ -112,7 +119,11 @@ pub fn process_dataframe(mut df: LazyFrame, config: &Config) -> Result<LazyFrame
             config::Operation::Window { .. } => {
                 df = df
                     .lazy()
-                    .with_column(operation.to_polars_expr().map_err(RunnerError::Other)?);
+                    .with_column(operation.to_polars_expr().map_err(|e| {
+                        RunnerError::Other(format!(
+                            "Could not convert window in to expression {operation:?} - {e}"
+                        ))
+                    })?);
             }
             config::Operation::GroupByTime {
                 time_column,
@@ -122,7 +133,11 @@ pub fn process_dataframe(mut df: LazyFrame, config: &Config) -> Result<LazyFrame
                 ..
             } => {
                 let time_bucket_col = output_column.as_ref().unwrap_or(time_column);
-                let truncate_expr = operation.to_polars_expr().map_err(RunnerError::Other)?;
+                let truncate_expr = operation.to_polars_expr().map_err(|e| {
+                    RunnerError::Other(format!(
+                        "Could not convert truncate in to expression {operation:?} - {e}"
+                    ))
+                })?;
                 let df_with_bucket = df.lazy().with_column(truncate_expr).collect()?;
                 let mut group_cols = vec![time_bucket_col.as_str()];
                 group_cols.extend(additional_groups.iter().map(|s| s.as_str()));
@@ -142,6 +157,7 @@ pub fn process_dataframe(mut df: LazyFrame, config: &Config) -> Result<LazyFrame
     }
     Ok(df)
 }
+
 pub fn dataframe_from_file(
     input_path: &str,
     file_format: &str,
@@ -149,7 +165,15 @@ pub fn dataframe_from_file(
 ) -> Result<LazyFrame, RunnerError> {
     info!("Processing input data from: {}", input_path);
 
-    let file = std::fs::File::open(&input_path).map_err(RunnerError::Io)?;
+    fn load_local_path(input_path: &str) -> Result<File, RunnerError> {
+        std::fs::File::open(&input_path).map_err(|e| {
+            RunnerError::Io(format!(
+                "Error opening local input: 
+        '{input_path}' {e}"
+            ))
+        })
+    }
+
     // Load the input data into a Polars DataFrame
     let df = match (file_format, is_cloud) {
         ("csv", _) => LazyCsvReader::new(input_path)
@@ -157,21 +181,29 @@ pub fn dataframe_from_file(
             .map_err(RunnerError::Polars)?
             .lazy(),
         ("jsonl", false) => {
-            let sample_file = std::fs::File::open(&input_path).map_err(RunnerError::Io)?;
+            let sample_file = std::fs::File::open(&input_path)
+                .map_err(|e| format!("Error reading local file for schema extraction: {e}"))?;
             let reader = BufReader::new(sample_file);
             let sample_data: Vec<String> =
                 reader.lines().take(10_000).filter_map(Result::ok).collect();
 
             let pid = std::process::id();
             let schema_sample = format!("schema_sample_{}.json", pid);
-            std::fs::write(&schema_sample, sample_data.join("\n")).map_err(RunnerError::Io)?;
+            std::fs::write(&schema_sample, sample_data.join("\n")).map_err(|e| {
+                format!("Error writing file for schema extraction: {schema_sample} - {e}")
+            })?;
 
-            let df_sample =
-                JsonLineReader::new(File::open(&schema_sample).map_err(RunnerError::Io)?)
-                    .infer_schema_len(Some(10_000.try_into().expect("always not 0")))
-                    .finish()
-                    .map_err(RunnerError::Polars)?;
-            fs::remove_file(schema_sample).map_err(RunnerError::Io)?;
+            let df_sample = JsonLineReader::new(File::open(&schema_sample).map_err(|e| {
+                format!("Error reading sample file for schema extraction: {schema_sample} - {e}")
+            })?)
+            .infer_schema_len(Some(10_000.try_into().expect("always not 0")))
+            .finish()
+            .map_err(RunnerError::Polars)?;
+            fs::remove_file(&schema_sample).map_err(|e| {
+                format!(
+                    "Error removing temporary file for schema extraction: {schema_sample} - {e}"
+                )
+            })?;
 
             let schema = df_sample.schema();
 
@@ -185,7 +217,7 @@ pub fn dataframe_from_file(
             .finish()
             .map_err(RunnerError::Polars)?
             .lazy(),
-        ("json", _) => JsonReader::new(file)
+        ("json", _) => JsonReader::new(load_local_path(input_path)?)
             .finish()
             .map_err(RunnerError::Polars)?
             .lazy(),
@@ -195,7 +227,7 @@ pub fn dataframe_from_file(
         ("ipc", false) => {
             LazyFrame::scan_ipc(input_path, Default::default()).map_err(RunnerError::Polars)?
         }
-        ("avro", false) => AvroReader::new(file)
+        ("avro", false) => AvroReader::new(load_local_path(input_path)?)
             .finish()
             .map_err(RunnerError::Polars)?
             .lazy(),
@@ -217,17 +249,11 @@ pub fn run(
     file_format: String,
     is_cloud: bool,
 ) -> Result<DataFrame, RunnerError> {
-    let mut df = dataframe_from_file(&input_path, &file_format, is_cloud)?;
-    df = operations(df, &config)?;
-
+    let df = dataframe_from_file(&input_path, &file_format, is_cloud)?;
+    let df = process_dataframe(df, &config)?;
     let df = df.collect().map_err(RunnerError::Polars)?;
+
     info!("Final DataFrame:\n{}", df);
 
-    Ok(df)
-}
-
-fn operations(df: LazyFrame, config: &Config) -> Result<LazyFrame, RunnerError> {
-    info!("Applying operations from config");
-    let df = process_dataframe(df, config)?;
     Ok(df)
 }
