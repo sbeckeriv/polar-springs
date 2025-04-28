@@ -253,6 +253,13 @@ pub fn run(
     let df = process_dataframe(df, &config)?;
     let df = df.collect().map_err(RunnerError::Polars)?;
 
+    // Schema validation if present in config
+    if let Some(schema) = &config.output_schema {
+        schema
+            .validate_dataframe(&df)
+            .map_err(|e| RunnerError::Other(format!("Schema validation failed: {}", e)))?;
+    }
+
     info!("Final DataFrame:\n{}", df);
 
     Ok(df)
