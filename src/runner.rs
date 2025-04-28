@@ -174,13 +174,13 @@ pub fn dataframe_from_file(
         })
     }
 
-    // Load the input data into a Polars DataFrame
     let df = match (file_format, is_cloud) {
         ("csv", _) => LazyCsvReader::new(input_path)
             .finish()
             .map_err(RunnerError::Polars)?
             .lazy(),
         ("jsonl", false) => {
+            // support skipping schema inference for jsonl
             let sample_file = std::fs::File::open(&input_path)
                 .map_err(|e| format!("Error reading local file for schema extraction: {e}"))?;
             let reader = BufReader::new(sample_file);

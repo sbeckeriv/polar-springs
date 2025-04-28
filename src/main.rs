@@ -41,7 +41,7 @@ fn main() {
     let config_content = match fs::read_to_string(&cli.config) {
         Ok(content) => content,
         Err(e) => {
-            error!("Failed to read config file: {}", e);
+            eprintln!("Failed to read config file: {}", e);
             std::process::exit(1);
         }
     };
@@ -52,7 +52,7 @@ fn main() {
             config = config_content;
         }
         Err(e) => {
-            error!("Failed to parse TOML configuration: {}", e);
+            eprintln!("Failed to parse TOML configuration: {}", e);
             std::process::exit(1);
         }
     }
@@ -68,7 +68,7 @@ fn main() {
             cli.file_format,
             cli.cloud_provider.is_some(),
         ) {
-            error!("Application error: {:>}", e);
+            eprintln!("Application error: {:>}", e);
             std::process::exit(1);
         }
     }
