@@ -68,7 +68,7 @@ fn main() {
             cli.file_format,
             cli.cloud_provider.is_some(),
         ) {
-            error!("Application error: {}", e);
+            error!("Application error: {:>}", e);
             std::process::exit(1);
         }
     }
