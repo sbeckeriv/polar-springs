@@ -3,6 +3,8 @@ use polars::prelude::{
 };
 use serde::Deserialize;
 
+use crate::runner::RunnerError;
+
 #[derive(Deserialize, Debug)]
 pub struct Config {
     pub operations: Vec<Operation>,
@@ -238,7 +240,7 @@ pub struct Aggregate {
     pub function: AllowedGroupFunction,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub enum AllowedGroupFunction {
     MIN,
     MAX,
@@ -252,6 +254,8 @@ pub enum AllowedGroupFunction {
     LAST,
     NUNIQUE,
     PERCENTILE(f64),
+    // "when(col('status') == 'success').then(col('response_time')).otherwise(lit(NULL)).mean()"
+    CUSTOM(String),
 }
 
 #[derive(Deserialize, Debug)]
@@ -400,7 +404,7 @@ impl Aggregate {
     pub fn to_polars_expr(&self) -> Result<polars::prelude::Expr, String> {
         let col = col(&self.column);
 
-        let col = match self.function {
+        let col = match self.function.clone() {
             AllowedGroupFunction::MIN => col.min(),
             AllowedGroupFunction::MAX => col.max(),
             AllowedGroupFunction::SUM => col.sum(),
@@ -415,6 +419,8 @@ impl Aggregate {
             AllowedGroupFunction::PERCENTILE(percentile) => {
                 col.quantile(lit(percentile), QuantileMethod::Nearest)
             }
+            AllowedGroupFunction::CUSTOM(custom) => Expr::try_from(custom.as_str())
+                .map_err(|e| format!("Failed to parse custom expression: {e}"))?,
         };
 
         let col = if let Some(alias) = &self.alias {
