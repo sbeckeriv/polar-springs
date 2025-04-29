@@ -1,0 +1,51 @@
+[[operations]]
+type = "WithColumn"
+name = "is_success_and_fast"
+
+[operations.expression]
+type = "Conditional"
+
+[operations.expression.condition]
+type = "BinaryOp"
+op = "AND"
+
+[operations.expression.condition.left]
+type = "BinaryOp"
+op = "EQ"
+
+[operations.expression.condition.left.left]
+type = "Column"
+value = "status_code"
+
+[operations.expression.condition.left.right]
+type = "Literal"
+value = 200
+
+[operations.expression.condition.right]
+type = "BinaryOp"
+op = "LT"
+
+[operations.expression.condition.right.left]
+type = "Column"
+value = "response_time_ms"
+
+[operations.expression.condition.right.right]
+type = "Literal"
+value = 100
+
+[operations.expression.then]
+type = "Literal"
+value = true
+
+[operations.expression.otherwise]
+type = "Literal"
+value = false
+
+[[operations]]
+type = "Select"
+columns = [
+    "timestamp",
+    "status_code",
+    "response_time_ms",
+    "is_success_and_fast",
+]
