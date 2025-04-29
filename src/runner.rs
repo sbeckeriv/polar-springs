@@ -188,7 +188,8 @@ pub fn dataframe_from_file(
                 reader.lines().take(10_000).filter_map(Result::ok).collect();
 
             let pid = std::process::id();
-            let schema_sample = format!("schema_sample_{}.json", pid);
+            let rand = rand::random::<u64>();
+            let schema_sample = format!("schema_sample_{pid}_{rand}.json");
             std::fs::write(&schema_sample, sample_data.join("\n")).map_err(|e| {
                 format!("Error writing file for schema extraction: {schema_sample} - {e}")
             })?;

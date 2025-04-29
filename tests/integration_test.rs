@@ -188,3 +188,22 @@ order = "desc"
 
 "#
 );
+
+config_string_test!(
+    complex_workflow_custom,
+    r#"
+[[operations]]
+type = "Select"
+columns = ["timestamp", "service_name", "endpoint", "status_code",  "response_time_ms", "geo_region"]
+
+[[operations]]
+type = "GroupBy"
+columns = [ "status_code", "service_name", "geo_region"]
+aggregate = [
+  { column = "response_time_ms", function = { "CUSTOM" = "lit(3)" } },
+  { column = "status_code", function = "COUNT", alias = "status_code_count" }
+]
+
+
+"#
+);
