@@ -373,8 +373,6 @@ pub enum AllowedGroupFunction {
     LAST,
     NUNIQUE,
     PERCENTILE(f64),
-    // "when(col('status') == 'success').then(col('response_time')).otherwise(lit(NULL)).mean()"
-    CUSTOM(String),
 }
 
 #[derive(Deserialize, Debug)]
@@ -521,6 +519,7 @@ pub enum ExpressionOperation {
 
 impl Aggregate {
     pub fn to_polars_expr(&self) -> Result<polars::prelude::Expr, String> {
+        dbg!(&self);
         let col = col(&self.column);
 
         let col = match self.function.clone() {
@@ -538,8 +537,6 @@ impl Aggregate {
             AllowedGroupFunction::PERCENTILE(percentile) => {
                 col.quantile(lit(percentile), QuantileMethod::Nearest)
             }
-            AllowedGroupFunction::CUSTOM(custom) => Expr::try_from(custom.as_str())
-                .map_err(|e| format!("Failed to parse custom expression: {e}"))?,
         };
 
         let col = if let Some(alias) = &self.alias {

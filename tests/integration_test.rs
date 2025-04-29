@@ -200,7 +200,6 @@ columns = ["timestamp", "service_name", "endpoint", "status_code",  "response_ti
 type = "GroupBy"
 columns = [ "status_code", "service_name", "geo_region"]
 aggregate = [
-  { column = "response_time_ms", function = { "CUSTOM" = "lit(3)" } },
   { column = "status_code", function = "COUNT", alias = "status_code_count" }
 ]
 
