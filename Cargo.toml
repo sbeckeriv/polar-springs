@@ -19,6 +19,7 @@ name = "log_generator"
 
 [dependencies]
 polars-io = { version = "*", features = [
+    "ipc_streaming",
     "csv",
     "json",
     "parquet",

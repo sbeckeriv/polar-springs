@@ -2,3 +2,4 @@
 /tests/test_configs
 /**/*_big_test.json
 schema_sample_*.json
+output.csv

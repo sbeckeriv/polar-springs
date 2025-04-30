@@ -49,3 +49,11 @@ columns = [
     "response_time_ms",
     "is_success_and_fast",
 ]
+[[outputs]]
+type = "Stdout"
+format = "Jsonl"
+
+[[outputs]]
+type = "File"
+path = "output.csv"
+format = "Csv"

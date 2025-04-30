@@ -28,7 +28,7 @@ filter = 400
 "#;
     let input = setup_test_logs();
 
-    let result = run(parse_config_str(config), input, "jsonl".to_string(), false);
+    let result = run(&parse_config_str(config), &input, &"jsonl", false);
     dbg!("Result: {:?}", &result);
     assert!(result.is_ok(), "Filter operation failed");
 }

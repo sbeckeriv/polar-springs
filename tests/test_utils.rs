@@ -33,9 +33,9 @@ macro_rules! config_string_test {
             let input = test_utils::setup_test_logs();
 
             let result = polars_cli::runner::run(
-                test_utils::parse_config_str(config),
-                input,
-                "jsonl".to_string(),
+                &test_utils::parse_config_str(config),
+                &input,
+                "jsonl",
                 false,
             );
             assert!(

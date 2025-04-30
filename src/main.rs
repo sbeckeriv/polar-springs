@@ -1,6 +1,6 @@
 use clap::Parser;
 use clap_derive::Parser;
-use polars_cli::runner::run;
+use polars_cli::runner::{run, run_with_output};
 use std::fs;
 use toml::Deserializer;
 use tracing::{error, info};
@@ -60,7 +60,7 @@ fn main() {
     if cli.parse {
         std::process::exit(0);
     } else {
-        if let Err(e) = run(
+        if let Err(e) = run_with_output(
             config,
             cli.local_input
                 .or_else(|| cli.cloud_provider.clone())

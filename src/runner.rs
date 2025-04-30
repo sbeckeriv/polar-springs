@@ -1,4 +1,7 @@
-use crate::config::{self, Config};
+use crate::{
+    config::{self, Config},
+    outputs::OutputConnector,
+};
 use polars::prelude::*;
 use polars_io::avro::AvroReader;
 use std::{
@@ -244,24 +247,40 @@ pub fn dataframe_from_file(
     Ok(df)
 }
 
-pub fn run(
+pub fn run_with_output(
     config: Config,
     input_path: String,
     file_format: String,
+    is_cloud: bool,
+) -> Result<(), RunnerError> {
+    let df = run(&config, &input_path, &file_format, is_cloud)?;
+    if let Some(output_configs) = config.outputs.as_ref() {
+        for output_config in output_configs.iter() {
+            let output: Box<dyn OutputConnector> = output_config
+                .try_into()
+                .map_err(|e| RunnerError::Other(format!("Could not convert to output {e}")))?;
+            output
+                .write(df.clone())
+                .map_err(|e| RunnerError::Other(format!("Could not write output - {e}")))?;
+        }
+    }
+    Ok(())
+}
+
+pub fn run(
+    config: &Config,
+    input_path: &str,
+    file_format: &str,
     is_cloud: bool,
 ) -> Result<DataFrame, RunnerError> {
     let df = dataframe_from_file(&input_path, &file_format, is_cloud)?;
     let df = process_dataframe(df, &config)?;
     let df = df.collect().map_err(RunnerError::Polars)?;
 
-    // Schema validation if present in config
     if let Some(schema) = &config.output_schema {
         schema
             .validate_dataframe(&df)
             .map_err(|e| RunnerError::Other(format!("Schema validation failed: {}", e)))?;
     }
-
-    info!("Final DataFrame:\n{}", df);
-
     Ok(df)
 }
