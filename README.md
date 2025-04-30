@@ -1,6 +1,31 @@
 Polars from configurations
 
-Aspirational configurations.
+# Running
+
+## polar-cli
+
+`cargo run  -- --config config.toml --file-format jsonl --local-input tests/request_logs.json`
+
+justfile contains commands to copy base request_logs.json to different sizes. it is stored in expanded_big_test.json
+`just expand-logs-50gb` 
+
+## file schema 
+This takes csv, json array, or json line files and guesses at what the value types are.
+
+`cat tests/request_logs.json|  cargo run --bin file_schema`
+
+## benchmark
+This will use the expanded_big_test.json file. use just to create it
+
+`time CRITERION_DEBUG=1 cargo bench`
+
+Open `target/criterion/report/index.html`
+
+## example log generator 
+To make fake request logs
+`cargo run --example log_generator`
+
+# Aspirational configurations.
 
 ## 1. Request Count Over Time
 
