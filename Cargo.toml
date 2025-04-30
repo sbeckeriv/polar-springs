@@ -6,7 +6,9 @@ edition = "2021"
 [[bin]]
 name = "polars_cli"
 path = "src/main.rs"
-
+[[bin]]
+name = "file_schema"
+path = "bin/file_schema.rs"
 # This section defines the library
 [lib]
 name = "polars_cli"
@@ -30,7 +32,7 @@ polars-io = { version = "*", features = [
     "gcp",
     "azure",
 ] }
-
+csv = "1"
 polars-core = "*"
 serde = { version = "1.0", features = ["derive"] }
 serde_path_to_error = "0"
