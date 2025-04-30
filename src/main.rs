@@ -1,9 +1,9 @@
 use clap::Parser;
 use clap_derive::Parser;
-use polars_cli::runner::{run, run_with_output};
+use polars_cli::runner::run_with_output;
 use std::fs;
 use toml::Deserializer;
-use tracing::{error, info};
+use tracing::info;
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]

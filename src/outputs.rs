@@ -1,3 +1,20 @@
+use polars::prelude::{CsvWriter, DataFrame, ParquetWriter};
+use polars_io::{
+    avro::AvroWriter,
+    ipc::IpcStreamWriter,
+    json::{JsonFormat, JsonWriter},
+    SerWriter,
+};
+use std::{
+    fs::File,
+    io::{self, Write},
+};
+
+use crate::config::{
+    CloudOutputConfig, DatabaseOutputConfig, FileOutputConfig, FormatOutputConfig, OutputConfig,
+    OutputFormats,
+};
+
 #[derive(Debug)]
 pub enum OutputError {
     Io(String),
@@ -24,23 +41,6 @@ impl From<String> for OutputError {
         OutputError::Other(e)
     }
 }
-use std::{
-    fs::File,
-    io::{self, Write},
-};
-
-use polars::prelude::{CsvWriter, DataFrame, ParquetWriter};
-use polars_io::{
-    avro::AvroWriter,
-    ipc::IpcStreamWriter,
-    json::{JsonFormat, JsonWriter},
-    SerWriter,
-};
-
-use crate::config::{
-    CloudOutputConfig, DatabaseOutputConfig, FileOutputConfig, FormatOutputConfig, OutputConfig,
-    OutputFormats,
-};
 
 pub trait OutputConnector {
     fn format(&self) -> crate::config::OutputFormats;
