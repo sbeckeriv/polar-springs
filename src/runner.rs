@@ -272,15 +272,9 @@ pub fn run(
     input_path: &str,
     file_format: &str,
     is_cloud: bool,
-) -> Result<DataFrame, RunnerError> {
+) -> Result<LazyFrame, RunnerError> {
     let df = dataframe_from_file(&input_path, &file_format, is_cloud)?;
     let df = process_dataframe(df, &config)?;
-    let df = df.collect().map_err(RunnerError::Polars)?;
 
-    if let Some(schema) = &config.output_schema {
-        schema
-            .validate_dataframe(&df)
-            .map_err(|e| RunnerError::Other(format!("Schema validation failed: {}", e)))?;
-    }
     Ok(df)
 }

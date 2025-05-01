@@ -1,13 +1,17 @@
-use polars::prelude::{CsvWriter, DataFrame, ParquetWriter};
+use polars::prelude::{
+    CsvWriter, CsvWriterOptions, DataFrame, LazyFrame, ParquetCompression, ParquetWriteOptions,
+    ParquetWriter, SerializeOptions,
+};
 use polars_io::{
     avro::AvroWriter,
-    ipc::IpcStreamWriter,
-    json::{JsonFormat, JsonWriter},
+    ipc::{IpcStreamWriter, IpcWriterOptions},
+    json::{JsonFormat, JsonWriter, JsonWriterOptions},
     SerWriter,
 };
 use std::{
     fs::File,
     io::{self, Write},
+    path::{self, Path},
 };
 
 use crate::configs::output::{
@@ -44,8 +48,10 @@ impl From<String> for OutputError {
 
 pub trait OutputConnector {
     fn format(&self) -> OutputFormats;
-    fn write(&self, df: DataFrame) -> Result<(), OutputError> {
-        let mut df = df;
+    fn write(&self, df: LazyFrame) -> Result<(), OutputError> {
+        let mut df = df
+            .collect()
+            .map_err(|e| OutputError::Io(format!("Failed to collect DataFrame: {}", e)))?;
         let mut file = self.file();
         match &self.format() {
             OutputFormats::Csv => {
@@ -146,6 +152,75 @@ impl OutputConnector for FileOutput {
         Box::new(File::create(self.config.path.clone()).expect("could not create file"))
     }
 
+    fn write(&self, df: LazyFrame) -> Result<(), OutputError> {
+        let mut df = df;
+        let mut file = self.file();
+        let path = Path::new(&self.config.path);
+        match &self.format() {
+            OutputFormats::Csv => {
+                LazyFrame::sink_csv(
+                    df,
+                    path,
+                    CsvWriterOptions {
+                        include_header: true,
+                        maintain_order: true,
+                        serialize_options: SerializeOptions {
+                            separator: b',',
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    },
+                    None,
+                )
+                .map_err(|e| OutputError::Io(format!("Failed to write CSV sink: {}", e)))?;
+            }
+            OutputFormats::Json => {
+                LazyFrame::sink_json(
+                    df,
+                    path,
+                    JsonWriterOptions {
+                        maintain_order: true,
+                    },
+                    None,
+                )
+                .map_err(|e| OutputError::Io(format!("Failed to write Json sink: {}", e)))?;
+            }
+            OutputFormats::Jsonl => {
+                let mut df = df.collect().map_err(|e| {
+                    OutputError::Io(format!("Failed to collect DataFrame for JSONL: {}", e))
+                })?;
+                JsonWriter::new(&mut file)
+                    .with_json_format(JsonFormat::JsonLines)
+                    .finish(&mut df)
+                    .map_err(|e| OutputError::Io(format!("Failed to write JSONLine: {}", e)))?;
+            }
+            OutputFormats::Parquet => {
+                LazyFrame::sink_parquet(df, &path, ParquetWriteOptions::default(), None)
+                    .map_err(|e| OutputError::Io(format!("Failed to write Parquet sink: {}", e)))?;
+            }
+            OutputFormats::Avro => {
+                let mut df = df.collect().map_err(|e| {
+                    OutputError::Io(format!("Failed to collect DataFrame for Avro: {}", e))
+                })?;
+                AvroWriter::new(&mut file)
+                    .finish(&mut df)
+                    .map_err(|e| OutputError::Io(format!("Failed to write Arrow: {}", e)))?;
+            }
+            OutputFormats::Icp { compression } => {
+                LazyFrame::sink_ipc(
+                    df,
+                    path,
+                    IpcWriterOptions {
+                        compression: compression.as_ref().map(Into::into),
+                        ..Default::default()
+                    },
+                    None,
+                )
+                .map_err(|e| OutputError::Io(format!("Failed to write ICP sink: {}", e)))?;
+            }
+        }
+        Ok(())
+    }
     fn format(&self) -> OutputFormats {
         self.config.format.clone()
     }
@@ -155,7 +230,7 @@ pub struct DatabaseOutput {
     pub config: DatabaseOutputConfig,
 }
 impl OutputConnector for DatabaseOutput {
-    fn write(&self, _df: DataFrame) -> Result<(), OutputError> {
+    fn write(&self, _df: LazyFrame) -> Result<(), OutputError> {
         // Implement database writing logic here
         Ok(())
     }
@@ -172,7 +247,7 @@ pub struct CloudOutput {
     pub config: CloudOutputConfig,
 }
 impl OutputConnector for CloudOutput {
-    fn write(&self, _df: DataFrame) -> Result<(), OutputError> {
+    fn write(&self, _df: LazyFrame) -> Result<(), OutputError> {
         //CloudWriter
         // Implement cloud writing logic here
         Ok(())

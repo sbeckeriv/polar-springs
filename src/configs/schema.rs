@@ -92,17 +92,6 @@ impl Schema {
     }
 }
 
-// Helper for LiteralValue to f64 (for min/max)
-impl LiteralValue {
-    pub fn as_f64(&self) -> Option<f64> {
-        match self {
-            LiteralValue::Float(f) => Some(*f),
-            LiteralValue::Integer(i) => Some(*i as f64),
-            _ => None,
-        }
-    }
-}
-
 #[derive(Deserialize, Debug, Clone)]
 #[serde(tag = "type", content = "params")]
 pub enum SchemaDtype {

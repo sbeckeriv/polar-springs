@@ -7,9 +7,43 @@ use crate::configs::{output::OutputConfig, schema::Schema};
 
 #[derive(Deserialize, Debug)]
 pub struct Config {
+    pub input: InputConfig,
     pub operations: Vec<Operation>,
     pub output_schema: Option<Schema>,
     pub outputs: Option<Vec<OutputConfig>>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct InputConfig {
+    // can be a file or a cloud url
+    pub location: String,
+    #[serde(flatten)]
+    pub format: InputFormat,
+    //#[serde(default)]
+    //pub schema: Option<Schema>,
+}
+
+#[derive(Deserialize, Debug)]
+pub enum InputFormat {
+    Csv {
+        #[serde(default)]
+        is_cloud: bool,
+        delimiter: String,
+        #[serde(default)]
+        has_header: bool,
+        #[serde(default)]
+        schema: Option<Schema>,
+    },
+    Json,
+    Parquet,
+    Ipc,
+    Avro,
+    JsonLines {
+        #[serde(default)]
+        is_cloud: bool,
+        #[serde(default)]
+        skip_sample: bool,
+    },
 }
 
 #[derive(Deserialize, Debug)]
