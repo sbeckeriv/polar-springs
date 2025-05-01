@@ -7,7 +7,7 @@ use crate::configs::{output::OutputConfig, schema::Schema};
 
 #[derive(Deserialize, Debug)]
 pub struct Config {
-    pub input: InputConfig,
+    pub input: Option<InputConfig>,
     pub operations: Vec<Operation>,
     pub output_schema: Option<Schema>,
     pub outputs: Option<Vec<OutputConfig>>,
@@ -245,6 +245,16 @@ pub enum LiteralValue {
     StringList(Vec<String>),
     IntegerList(Vec<i64>),
     FloatList(Vec<f64>),
+}
+// Helper for LiteralValue to f64 (for min/max)
+impl LiteralValue {
+    pub fn as_f64(&self) -> Option<f64> {
+        match self {
+            LiteralValue::Float(f) => Some(*f),
+            LiteralValue::Integer(i) => Some(*i as f64),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Deserialize, Debug, Clone)]
