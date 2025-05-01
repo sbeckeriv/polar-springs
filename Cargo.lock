@@ -2413,6 +2413,7 @@ dependencies = [
  "polars",
  "polars-core",
  "polars-io",
+ "polars-lazy",
  "rand 0.9.1",
  "rand_distr 0.5.1",
  "serde",

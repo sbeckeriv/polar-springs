@@ -33,19 +33,19 @@ polars-io = { version = "*", features = [
     "gcp",
     "azure",
 ] }
-csv = "1"
-polars-core = "*"
+polars-core = { version = "*" }
+polars = { version = "0.46.0", features = ["full"] }
+polars-lazy = { version = "0.46.0", features = ["new_streaming"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_path_to_error = "0"
 clap = { version = "4.5.35" }
 clap_derive = { version = "4.0.0-rc.1" }
 toml = "0.8.20"
-polars = { version = "0.46.0", features = ["full"] }
 tokio = { version = "1.44.2", features = ["full"] }
 tracing = "0.1.41"
 chrono = { version = "*", features = ["serde"] }
 tracing-subscriber = { version = "0.3.19", features = ["fmt", "ansi"] }
-
+csv = "1"
 rand = "0.9"
 rand_distr = "*"
 uuid = { version = "1.0", features = ["v4"] }

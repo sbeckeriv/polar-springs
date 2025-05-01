@@ -151,76 +151,78 @@ impl OutputConnector for FileOutput {
     fn file(&self) -> Box<dyn Write> {
         Box::new(File::create(self.config.path.clone()).expect("could not create file"))
     }
-
-    fn write(&self, df: LazyFrame) -> Result<(), OutputError> {
-        let mut df = df;
-        let mut file = self.file();
-        let path = Path::new(&self.config.path);
-        match &self.format() {
-            OutputFormats::Csv => {
-                LazyFrame::sink_csv(
-                    df,
-                    path,
-                    CsvWriterOptions {
-                        include_header: true,
-                        maintain_order: true,
-                        serialize_options: SerializeOptions {
-                            separator: b',',
+    /*
+    Application error: Other error: Could not write output - IO error: Failed to write CSV sink: sink_Csv(CsvWriterOptions { include_bom: false, include_header: true, batch_size: 1024, maintain_order: true, serialize_options: SerializeOptions { date_format: None, time_format: None, datetime_format: None, float_scientific: None, float_precision: None, separator: 44, quote_char: 34, null: "", line_terminator: "\n", quote_style: Necessary } }) not yet supported in standard engine. Use 'collect().write_Csv(CsvWriterOptions { include_bom: false, include_header: true, batch_size: 1024, maintain_order: true, serialize_options: SerializeOptions { date_format: None, time_format: None, datetime_format: None, float_scientific: None, float_precision: None, separator: 44, quote_char: 34, null: "", line_terminator: "\n", quote_style: Necessary } })()'
+        fn write(&self, df: LazyFrame) -> Result<(), OutputError> {
+            let mut df = df;
+            let mut file = self.file();
+            let path = Path::new(&self.config.path);
+            match &self.format() {
+                OutputFormats::Csv => {
+                    LazyFrame::sink_csv(
+                        df,
+                        path,
+                        CsvWriterOptions {
+                            include_header: true,
+                            maintain_order: true,
+                            serialize_options: SerializeOptions {
+                                separator: b',',
+                                ..Default::default()
+                            },
                             ..Default::default()
                         },
-                        ..Default::default()
-                    },
-                    None,
-                )
-                .map_err(|e| OutputError::Io(format!("Failed to write CSV sink: {}", e)))?;
+                        None,
+                    )
+                    .map_err(|e| OutputError::Io(format!("Failed to write CSV sink: {}", e)))?;
+                }
+                OutputFormats::Json => {
+                    LazyFrame::sink_json(
+                        df,
+                        path,
+                        JsonWriterOptions {
+                            maintain_order: true,
+                        },
+                        None,
+                    )
+                    .map_err(|e| OutputError::Io(format!("Failed to write Json sink: {}", e)))?;
+                }
+                OutputFormats::Jsonl => {
+                    let mut df = df.collect().map_err(|e| {
+                        OutputError::Io(format!("Failed to collect DataFrame for JSONL: {}", e))
+                    })?;
+                    JsonWriter::new(&mut file)
+                        .with_json_format(JsonFormat::JsonLines)
+                        .finish(&mut df)
+                        .map_err(|e| OutputError::Io(format!("Failed to write JSONLine: {}", e)))?;
+                }
+                OutputFormats::Parquet => {
+                    LazyFrame::sink_parquet(df, &path, ParquetWriteOptions::default(), None)
+                        .map_err(|e| OutputError::Io(format!("Failed to write Parquet sink: {}", e)))?;
+                }
+                OutputFormats::Avro => {
+                    let mut df = df.collect().map_err(|e| {
+                        OutputError::Io(format!("Failed to collect DataFrame for Avro: {}", e))
+                    })?;
+                    AvroWriter::new(&mut file)
+                        .finish(&mut df)
+                        .map_err(|e| OutputError::Io(format!("Failed to write Arrow: {}", e)))?;
+                }
+                OutputFormats::Icp { compression } => {
+                    LazyFrame::sink_ipc(
+                        df,
+                        path,
+                        IpcWriterOptions {
+                            compression: compression.as_ref().map(Into::into),
+                            ..Default::default()
+                        },
+                        None,
+                    )
+                    .map_err(|e| OutputError::Io(format!("Failed to write ICP sink: {}", e)))?;
+                }
             }
-            OutputFormats::Json => {
-                LazyFrame::sink_json(
-                    df,
-                    path,
-                    JsonWriterOptions {
-                        maintain_order: true,
-                    },
-                    None,
-                )
-                .map_err(|e| OutputError::Io(format!("Failed to write Json sink: {}", e)))?;
-            }
-            OutputFormats::Jsonl => {
-                let mut df = df.collect().map_err(|e| {
-                    OutputError::Io(format!("Failed to collect DataFrame for JSONL: {}", e))
-                })?;
-                JsonWriter::new(&mut file)
-                    .with_json_format(JsonFormat::JsonLines)
-                    .finish(&mut df)
-                    .map_err(|e| OutputError::Io(format!("Failed to write JSONLine: {}", e)))?;
-            }
-            OutputFormats::Parquet => {
-                LazyFrame::sink_parquet(df, &path, ParquetWriteOptions::default(), None)
-                    .map_err(|e| OutputError::Io(format!("Failed to write Parquet sink: {}", e)))?;
-            }
-            OutputFormats::Avro => {
-                let mut df = df.collect().map_err(|e| {
-                    OutputError::Io(format!("Failed to collect DataFrame for Avro: {}", e))
-                })?;
-                AvroWriter::new(&mut file)
-                    .finish(&mut df)
-                    .map_err(|e| OutputError::Io(format!("Failed to write Arrow: {}", e)))?;
-            }
-            OutputFormats::Icp { compression } => {
-                LazyFrame::sink_ipc(
-                    df,
-                    path,
-                    IpcWriterOptions {
-                        compression: compression.as_ref().map(Into::into),
-                        ..Default::default()
-                    },
-                    None,
-                )
-                .map_err(|e| OutputError::Io(format!("Failed to write ICP sink: {}", e)))?;
-            }
+            Ok(())
         }
-        Ok(())
-    }
+     */
     fn format(&self) -> OutputFormats {
         self.config.format.clone()
     }
