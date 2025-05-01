@@ -10,7 +10,7 @@ use std::{
     io::{self, Write},
 };
 
-use crate::config::{
+use crate::configs::output::{
     CloudOutputConfig, DatabaseOutputConfig, FileOutputConfig, FormatOutputConfig, OutputConfig,
     OutputFormats,
 };
@@ -43,36 +43,36 @@ impl From<String> for OutputError {
 }
 
 pub trait OutputConnector {
-    fn format(&self) -> crate::config::OutputFormats;
+    fn format(&self) -> OutputFormats;
     fn write(&self, df: DataFrame) -> Result<(), OutputError> {
         let mut df = df;
         let mut file = self.file();
         match &self.format() {
-            crate::config::OutputFormats::Csv => {
+            OutputFormats::Csv => {
                 CsvWriter::new(&mut file)
                     .include_header(true)
                     .with_separator(b',')
                     .finish(&mut df)
                     .map_err(|e| OutputError::Io(format!("Failed to write CSV: {}", e)))?;
             }
-            crate::config::OutputFormats::Json => {
+            OutputFormats::Json => {
                 JsonWriter::new(&mut file)
                     .with_json_format(JsonFormat::Json)
                     .finish(&mut df)
                     .map_err(|e| OutputError::Io(format!("Failed to write JSON: {}", e)))?;
             }
-            crate::config::OutputFormats::Jsonl => {
+            OutputFormats::Jsonl => {
                 JsonWriter::new(&mut file)
                     .with_json_format(JsonFormat::JsonLines)
                     .finish(&mut df)
                     .map_err(|e| OutputError::Io(format!("Failed to write JSONLine: {}", e)))?;
             }
-            crate::config::OutputFormats::Parquet => {
+            OutputFormats::Parquet => {
                 ParquetWriter::new(&mut file)
                     .finish(&mut df)
                     .map_err(|e| OutputError::Io(format!("Failed to write Parquet: {}", e)))?;
             }
-            crate::config::OutputFormats::Avro => {
+            OutputFormats::Avro => {
                 AvroWriter::new(&mut file)
                     .finish(&mut df)
                     .map_err(|e| OutputError::Io(format!("Failed to write Arrow: {}", e)))?;
@@ -121,7 +121,7 @@ impl OutputConnector for Stderr {
         Box::new(io::stderr())
     }
 
-    fn format(&self) -> crate::config::OutputFormats {
+    fn format(&self) -> OutputFormats {
         self.config.format.clone()
     }
 }
@@ -134,7 +134,7 @@ impl OutputConnector for Stdout {
         Box::new(io::stdout())
     }
 
-    fn format(&self) -> crate::config::OutputFormats {
+    fn format(&self) -> OutputFormats {
         self.config.format.clone()
     }
 }
@@ -146,7 +146,7 @@ impl OutputConnector for FileOutput {
         Box::new(File::create(self.config.path.clone()).expect("could not create file"))
     }
 
-    fn format(&self) -> crate::config::OutputFormats {
+    fn format(&self) -> OutputFormats {
         self.config.format.clone()
     }
 }
@@ -163,7 +163,7 @@ impl OutputConnector for DatabaseOutput {
         todo!()
     }
 
-    fn format(&self) -> crate::config::OutputFormats {
+    fn format(&self) -> OutputFormats {
         todo!()
     }
 }
@@ -181,7 +181,7 @@ impl OutputConnector for CloudOutput {
         todo!()
     }
 
-    fn format(&self) -> crate::config::OutputFormats {
+    fn format(&self) -> OutputFormats {
         todo!()
     }
 }
