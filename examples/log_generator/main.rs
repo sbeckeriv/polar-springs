@@ -1,4 +1,4 @@
-use chrono::{DateTime, Duration, Local, TimeZone, Timelike};
+use chrono::{DateTime, Datelike, Duration, Local, TimeZone, Timelike};
 use rand::prelude::*;
 use rand_distr::weighted::WeightedIndex;
 use rand_distr::Distribution;
@@ -9,6 +9,52 @@ use std::fs::File;
 use std::io::{BufWriter, Write};
 use uuid::Uuid;
 
+// --- Enhancements for Realistic Load Simulation ---
+// 1. Diurnal traffic pattern modeling (hourly traffic curve)
+// 2. Bot/crawler traffic simulation
+// 3. Enhanced session and user journey modeling
+// 4. Error/anomaly burst injection utilities
+
+/// Represents the type of actor generating the request.
+#[derive(Clone, Debug)]
+enum ActorType {
+    Human,
+    Bot,
+}
+
+/// Helper for diurnal traffic intensity (returns multiplier for given hour)
+fn diurnal_traffic_multiplier(hour: u32, is_weekend: bool) -> f64 {
+    if is_weekend {
+        // Lower, flatter traffic on weekends
+        match hour {
+            10..=20 => 0.4,
+            _ => 0.1,
+        }
+    } else {
+        // Workday: ramp up, peak, lunch dip, afternoon peak, evening drop
+        match hour {
+            7..=8 => 0.3,
+            9..=11 => 0.7,
+            12 => 0.5,
+            13..=16 => 1.0,
+            17..=18 => 0.6,
+            19..=21 => 0.3,
+            _ => 0.1,
+        }
+    }
+}
+
+/// Returns a random bot user agent string.
+fn random_bot_user_agent(rng: &mut StdRng) -> &'static str {
+    let bots = [
+        "Googlebot/2.1 (+http://www.google.com/bot.html)",
+        "Bingbot/2.0 (+http://www.bing.com/bingbot.htm)",
+        "DuckDuckBot/1.0; (+http://duckduckgo.com/duckduckbot.html)",
+        "Mozilla/5.0 (compatible; YandexBot/3.0; +http://yandex.com/bots)",
+        "Mozilla/5.0 (compatible; Baiduspider/2.0; +http://www.baidu.com/search/spider.html)",
+    ];
+    bots[rng.gen_range(0..bots.len())]
+}
 #[derive(Serialize, Debug, Clone)]
 struct LogEntry {
     timestamp: String,
@@ -46,10 +92,11 @@ fn main() -> std::io::Result<()> {
     let mut rng = StdRng::seed_from_u64(42);
 
     // Base number of logs
-    let n_logs = 10000;
-
+    let n_logs = 1_000_000;
+    let year = 2024;
+    let month = 4;
     // Time range for logs (7 days)
-    let start_date = Local.ymd(2023, 4, 1).and_hms(0, 0, 0);
+    let start_date = Local.ymd(year, month, 1).and_hms(0, 0, 0);
     let end_date = start_date + Duration::days(7);
 
     // Services with weights
@@ -184,24 +231,78 @@ fn main() -> std::io::Result<()> {
         "Mozilla/5.0 (Linux; Android 11) Chrome/91.0.4472.120 Mobile",
     ];
 
-    // Generate timestamps with business hour patterns
-    let mut timestamps = generate_timestamps(n_logs, start_date, end_date, &mut rng);
-    timestamps.sort();
+    // Generate timestamps with diurnal and bot/human patterns
+    let mut timestamp_actors =
+        generate_realistic_timestamps(n_logs, start_date, end_date, 0.05, &mut rng);
+    timestamp_actors.sort_by(|a, b| a.0.cmp(&b.0));
 
     // Generate all logs
     let mut logs = Vec::with_capacity(n_logs + 5000); // Add extra capacity for special patterns
 
-    for i in 0..n_logs {
-        let timestamp = timestamps[i];
+    for (timestamp, actor_type) in timestamp_actors {
         let request_id = Uuid::new_v4().to_string();
 
-        let service_idx = service_dist.sample(&mut rng);
-        let service_name = services[service_idx].to_string();
-
-        let service_endpoints = endpoints.get(service_name.as_str()).unwrap();
-        let endpoint_idx = rng.gen_range(0..service_endpoints.len());
-        let mut endpoint = service_endpoints[endpoint_idx].to_string();
-
+        // Branch for bot vs human
+        let (service_name, endpoint, method, user_id, user_agent, geo_region, client_ip) =
+            match actor_type {
+                ActorType::Bot => {
+                    // Bots crawl a variety of endpoints, often GET, random user_id, bot user agent
+                    let bot_services = ["api-gateway", "product-service", "search-service"];
+                    let service_name =
+                        bot_services[rng.gen_range(0..bot_services.len())].to_string();
+                    let service_endpoints = endpoints.get(service_name.as_str()).unwrap();
+                    let endpoint =
+                        service_endpoints[rng.gen_range(0..service_endpoints.len())].to_string();
+                    let method = "GET".to_string();
+                    let user_id = "bot".to_string();
+                    let user_agent = random_bot_user_agent(&mut rng).to_string();
+                    let geo_region = regions[rng.gen_range(0..regions.len())].to_string();
+                    let region_ip_list = region_ips.get(geo_region.as_str()).unwrap();
+                    let client_ip = region_ip_list[rng.gen_range(0..region_ip_list.len())].clone();
+                    (
+                        service_name,
+                        endpoint,
+                        method,
+                        user_id,
+                        user_agent,
+                        geo_region,
+                        client_ip,
+                    )
+                }
+                ActorType::Human => {
+                    let service_idx = service_dist.sample(&mut rng);
+                    let service_name = services[service_idx].to_string();
+                    let service_endpoints = endpoints.get(service_name.as_str()).unwrap();
+                    let endpoint_idx = rng.gen_range(0..service_endpoints.len());
+                    let mut endpoint = service_endpoints[endpoint_idx].to_string();
+                    // Replace {id} with a random number if present
+                    if endpoint.contains("{id}") {
+                        let id = rng.gen_range(1..1001).to_string();
+                        endpoint = endpoint.replace("{id}", &id);
+                    }
+                    let method_idx = method_dist.sample(&mut rng);
+                    let method = methods[method_idx].to_string();
+                    let user_idx = user_dist.sample(&mut rng);
+                    let user_id = user_ids[user_idx].clone();
+                    let region_idx = rng.gen_range(0..regions.len());
+                    let geo_region = regions[region_idx].to_string();
+                    let region_ip_list = region_ips.get(geo_region.as_str()).unwrap();
+                    let ip_idx = rng.gen_range(0..region_ip_list.len());
+                    let client_ip = region_ip_list[ip_idx].clone();
+                    let ua_idx = rng.gen_range(0..user_agents.len());
+                    let user_agent = user_agents[ua_idx].to_string();
+                    (
+                        service_name,
+                        endpoint,
+                        method,
+                        user_id,
+                        user_agent,
+                        geo_region,
+                        client_ip,
+                    )
+                }
+            };
+        let mut endpoint = endpoint.clone();
         // Replace {id} with a random number if present
         if endpoint.contains("{id}") {
             let id = rng.gen_range(1..1001).to_string();
@@ -395,43 +496,74 @@ fn main() -> std::io::Result<()> {
         let network_io = rng.gen_range(10.0..200.0);
 
         // Create log entry
-        let log_entry = LogEntry {
-            timestamp: timestamp.to_rfc3339(),
-            request_id,
-            service_name,
-            endpoint,
-            method,
-            status_code: status_code_copy,
-            response_time_ms,
-            user_id,
-            client_ip,
-            user_agent,
-            request_size_bytes,
-            response_size_bytes,
-            content_type,
-            is_error: is_error_copy,
-            error_type: error_type_copy,
-            geo_region,
-            has_external_call,
-            external_service,
-            external_endpoint,
-            external_call_time_ms,
-            external_call_status,
-            db_query,
-            db_name,
-            db_execution_time_ms,
-            cpu_utilization,
-            memory_utilization,
-            disk_io,
-            network_io,
+        let log_entry = match actor_type {
+            ActorType::Bot => LogEntry {
+                timestamp: timestamp.to_rfc3339(),
+                request_id,
+                service_name,
+                endpoint,
+                method,
+                status_code: 200,
+                response_time_ms: rng.gen_range(20..80),
+                user_id,
+                client_ip,
+                user_agent,
+                request_size_bytes: rng.gen_range(200..800),
+                response_size_bytes: rng.gen_range(500..2000),
+                content_type: "text/html".to_string(),
+                is_error: false,
+                error_type: None,
+                geo_region,
+                has_external_call: false,
+                external_service: None,
+                external_endpoint: None,
+                external_call_time_ms: None,
+                external_call_status: None,
+                db_query: None,
+                db_name: None,
+                db_execution_time_ms: None,
+                cpu_utilization: rng.gen_range(5.0..20.0),
+                memory_utilization: rng.gen_range(5.0..20.0),
+                disk_io: rng.gen_range(1.0..10.0),
+                network_io: rng.gen_range(2.0..20.0),
+            },
+            ActorType::Human => LogEntry {
+                timestamp: timestamp.to_rfc3339(),
+                request_id,
+                service_name,
+                endpoint,
+                method,
+                status_code: status_code_copy,
+                response_time_ms,
+                user_id,
+                client_ip,
+                user_agent,
+                request_size_bytes,
+                response_size_bytes,
+                content_type,
+                is_error: is_error_copy,
+                error_type: error_type_copy,
+                geo_region,
+                has_external_call,
+                external_service,
+                external_endpoint,
+                external_call_time_ms,
+                external_call_status,
+                db_query,
+                db_name,
+                db_execution_time_ms,
+                cpu_utilization,
+                memory_utilization,
+                disk_io,
+                network_io,
+            },
         };
 
         logs.push(log_entry);
     }
 
     // SPECIAL PATTERN 1: Add traffic spike for anomaly detection
-    let spike_start = Local.ymd(2023, 4, 3).and_hms(10, 0, 0);
-    let spike_end = Local.ymd(2023, 4, 3).and_hms(11, 0, 0);
+    let spike_start = Local.ymd(year, month, 3).and_hms(10, 0, 0);
 
     for _ in 0..2000 {
         let seconds_offset = rng.gen_range(0..3600);
@@ -608,6 +740,82 @@ fn generate_timestamps(
             .unwrap();
 
         timestamps.push(random_date);
+    }
+
+    timestamps
+}
+/// Generates timestamps with diurnal/weekday-aware traffic intensity.
+/// Returns a vector of (timestamp, ActorType) for both human and bot traffic.
+fn generate_realistic_timestamps(
+    n: usize,
+    start_date: DateTime<Local>,
+    end_date: DateTime<Local>,
+    bot_fraction: f64,
+    rng: &mut StdRng,
+) -> Vec<(DateTime<Local>, ActorType)> {
+    let mut timestamps = Vec::with_capacity(n);
+    let duration_days = (end_date - start_date).num_days();
+
+    // Estimate total human and bot logs
+    let n_bots = ((n as f64) * bot_fraction).round() as usize;
+    let n_humans = n - n_bots;
+
+    // Human traffic: distribute by diurnal multiplier
+    for _ in 0..n_humans {
+        let random_day = rng.gen_range(0..=duration_days);
+        let mut random_date = start_date + Duration::days(random_day);
+
+        let is_weekend = matches!(
+            random_date.weekday(),
+            chrono::Weekday::Sat | chrono::Weekday::Sun
+        );
+
+        // Weighted hour selection
+        let mut hour_weights = vec![];
+        for hour in 0..24 {
+            hour_weights.push(diurnal_traffic_multiplier(hour, is_weekend));
+        }
+        let hour_dist = WeightedIndex::new(&hour_weights).unwrap();
+        let hour = hour_dist.sample(rng) as u32;
+
+        let minute = rng.gen_range(0..60);
+        let second = rng.gen_range(0..60);
+
+        random_date = random_date
+            .with_hour(hour)
+            .unwrap()
+            .with_minute(minute)
+            .unwrap()
+            .with_second(second)
+            .unwrap();
+
+        timestamps.push((random_date, ActorType::Human));
+    }
+
+    // Bot/crawler traffic: flatter, but with possible bursts
+    for _ in 0..n_bots {
+        let random_day = rng.gen_range(0..=duration_days);
+        let mut random_date = start_date + Duration::days(random_day);
+
+        // Bots crawl at all hours, but sometimes burst at night
+        let hour = if rng.gen::<f64>() < 0.2 {
+            rng.gen_range(0..6) // Night burst
+        } else {
+            rng.gen_range(0..24)
+        };
+
+        let minute = rng.gen_range(0..60);
+        let second = rng.gen_range(0..60);
+
+        random_date = random_date
+            .with_hour(hour)
+            .unwrap()
+            .with_minute(minute)
+            .unwrap()
+            .with_second(second)
+            .unwrap();
+
+        timestamps.push((random_date, ActorType::Bot));
     }
 
     timestamps
