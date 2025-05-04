@@ -1,13 +1,13 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use polars_cli::config::Config;
+use polars_cli::config::parse_config;
 use polars_cli::runner::{dataframe_from_file, process_dataframe};
 
 fn bench_process_dataframe(c: &mut Criterion) {
-    let file = "expanded_big_test.json";
-    let df = dataframe_from_file(&file, "jsonl", false)
-        .expect("Failed to read file: expaned_big_test.json run `just` to generate it");
-
     let s = r#"
+[[input]]
+type = "Jsonl"
+path = "expanded_big_test.json"
+
 [[operations]]
 type = "WithColumn"
 name = "total_processing_time"
@@ -17,16 +17,10 @@ expression = { type = "BinaryOp", left = { type = "Column", value = "response_ti
 type = "Select"
 columns = ["timestamp", "total_processing_time",  "endpoint", "status_code", "response_time_ms", "external_call_time_ms"]
 "#;
-    let d = toml::Deserializer::new(s);
+    let config = parse_config(s);
 
-    let config = match serde_path_to_error::deserialize::<_, Config>(d) {
-        Ok(cfg) => cfg,
-        Err(e) => {
-            eprintln!("Failed to parse config: {e}\nPath: {}", e.path());
-            panic!("Config parsing failed");
-        }
-    };
-
+    let df = dataframe_from_file(&config)
+        .expect("Failed to read file: expaned_big_test.json run `just` to generate it");
     c.bench_function("process_dataframe", |b| {
         b.iter(|| {
             let result = process_dataframe(black_box(df.clone()), black_box(&config));

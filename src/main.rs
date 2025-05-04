@@ -1,8 +1,9 @@
 use clap::Parser;
 use clap_derive::Parser;
-use polars_cli::runner::run_with_output;
-use std::fs;
-use toml::Deserializer;
+use polars_cli::{
+    config::{parse_config_file, InputConfig},
+    runner::run_with_output,
+};
 use tracing::info;
 
 #[derive(Parser, Debug)]
@@ -18,7 +19,7 @@ struct Cli {
 
     /// csv, jsonl (json per line), json (array of json), parquet, avro
     #[clap(long)]
-    file_format: String,
+    file_format: Option<String>,
 
     /// Path to the input data stream (e.g., file path)
     #[clap(short, long)]
@@ -36,38 +37,31 @@ fn main() {
     let cli = Cli::parse();
 
     info!("Parsing TOML configuration from: {}", cli.config);
-
     // Pass cloud_options to runner::run or use as needed
-    let config_content = match fs::read_to_string(&cli.config) {
-        Ok(content) => content,
-        Err(e) => {
-            eprintln!("Failed to read config file: {}", e);
-            std::process::exit(1);
-        }
-    };
-    let d = Deserializer::new(&config_content);
-    let config;
-    match serde_path_to_error::deserialize::<_, polars_cli::config::Config>(d) {
-        Ok(config_content) => {
-            config = config_content;
-        }
-        Err(e) => {
-            eprintln!("Failed to parse TOML configuration: {}", e);
-            std::process::exit(1);
-        }
-    }
-
+    let mut config = parse_config_file(&cli.config);
     if cli.parse {
         std::process::exit(0);
     } else {
-        if let Err(e) = run_with_output(
-            config,
-            cli.local_input
+        if config.input.is_none() {
+            let input_path = cli
+                .local_input
                 .or_else(|| cli.cloud_provider.clone())
-                .expect("Either local_input or cloud_provider must be provided"),
-            cli.file_format,
-            cli.cloud_provider.is_some(),
-        ) {
+                .expect("Input path is required if not present in the config file.");
+
+            let file_format = cli
+                .file_format
+                .expect(
+                    "File format is required unless you have an input config in the config file.",
+                )
+                .to_lowercase();
+            config.input = Some(InputConfig::new(
+                &input_path,
+                &file_format,
+                cli.cloud_provider.is_some(),
+                false,
+            ));
+        }
+        if let Err(e) = run_with_output(config) {
             eprintln!("Application error: {:>}", e);
             std::process::exit(1);
         }

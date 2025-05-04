@@ -1,5 +1,5 @@
 use crate::{
-    config::{self, Config},
+    config::{self, Config, InputFormat},
     outputs::OutputConnector,
 };
 use polars::prelude::*;
@@ -8,7 +8,7 @@ use std::{
     fs::{self, File},
     io::{BufRead, BufReader},
 };
-use tracing::{error, info};
+use tracing::info;
 
 #[derive(Debug)]
 pub enum RunnerError {
@@ -161,12 +161,14 @@ pub fn process_dataframe(mut df: LazyFrame, config: &Config) -> Result<LazyFrame
     Ok(df)
 }
 
-pub fn dataframe_from_file(
-    input_path: &str,
-    file_format: &str,
-    is_cloud: bool,
-) -> Result<LazyFrame, RunnerError> {
-    info!("Processing input data from: {}", input_path);
+pub fn dataframe_from_file(config: &Config) -> Result<LazyFrame, RunnerError> {
+    if config.input.is_none() {
+        return Err(RunnerError::Other(
+            "No input file provided in the configuration.".to_string(),
+        ));
+    }
+    let input_config = config.input.as_ref().unwrap();
+    info!("Processing input data from: {}", input_config.location);
 
     fn load_local_path(input_path: &str) -> Result<File, RunnerError> {
         std::fs::File::open(&input_path).map_err(|e| {
@@ -177,83 +179,84 @@ pub fn dataframe_from_file(
         })
     }
 
-    let df = match (file_format, is_cloud) {
-        ("csv", _) => LazyCsvReader::new(input_path)
-            .finish()
-            .map_err(RunnerError::Polars)?
-            .lazy(),
-        ("jsonl", false) => {
-            // support skipping schema inference for jsonl
-            let sample_file = std::fs::File::open(&input_path)
-                .map_err(|e| format!("Error reading local file for schema extraction: {e}"))?;
-            let reader = BufReader::new(sample_file);
-            let sample_data: Vec<String> =
-                reader.lines().take(10_000).filter_map(Result::ok).collect();
-
-            let pid = std::process::id();
-            let rand = rand::random::<u64>();
-            let schema_sample = format!("schema_sample_{pid}_{rand}.json");
-            std::fs::write(&schema_sample, sample_data.join("\n")).map_err(|e| {
-                format!("Error writing file for schema extraction: {schema_sample} - {e}")
-            })?;
-
-            let df_sample = JsonLineReader::new(File::open(&schema_sample).map_err(|e| {
-                format!("Error reading sample file for schema extraction: {schema_sample} - {e}")
-            })?)
-            .infer_schema_len(Some(10_000.try_into().expect("always not 0")))
-            .finish()
-            .map_err(RunnerError::Polars)?;
-            fs::remove_file(&schema_sample).map_err(|e| {
-                format!(
-                    "Error removing temporary file for schema extraction: {schema_sample} - {e}"
-                )
-            })?;
-
-            let schema = df_sample.schema();
-
-            LazyJsonLineReader::new(input_path)
-                .with_schema(Some(schema.clone()))
+    let df = match &input_config.format {
+        InputFormat::Csv {
+            is_cloud,
+            delimiter,
+            has_header,
+            schema,
+        } => {
+            let delimiter = delimiter.as_bytes().first().expect("delimiter is empty");
+            LazyCsvReader::new(input_config.location.clone())
+                .with_separator(*delimiter)
+                .with_has_header(*has_header)
                 .finish()
                 .map_err(RunnerError::Polars)?
                 .lazy()
         }
-        ("jsonl", true) => LazyJsonLineReader::new(input_path)
+        InputFormat::JsonLines {
+            is_cloud,
+            skip_sample,
+        } => {
+            let schema: Option<Schema> = None;
+            if !skip_sample {
+                let sample_file = std::fs::File::open(&input_config.location)
+                    .map_err(|e| format!("Error reading local file for schema extraction: {e}"))?;
+                let reader = BufReader::new(sample_file);
+                let sample_data: Vec<String> =
+                    reader.lines().take(10_000).filter_map(Result::ok).collect();
+
+                let pid = std::process::id();
+                let rand = rand::random::<u64>();
+                let schema_sample = format!("schema_sample_{pid}_{rand}.json");
+                std::fs::write(&schema_sample, sample_data.join("\n")).map_err(|e| {
+                    format!("Error writing file for schema extraction: {schema_sample} - {e}")
+                })?;
+
+                let df_sample = JsonLineReader::new(File::open(&schema_sample).map_err(|e| {
+                    format!(
+                        "Error reading sample file for schema extraction: {schema_sample} - {e}"
+                    )
+                })?)
+                .infer_schema_len(Some(10_000.try_into().expect("always not 0")))
+                .finish()
+                .map_err(RunnerError::Polars)?;
+                fs::remove_file(&schema_sample).map_err(|e| {
+                    format!(
+                    "Error removing temporary file for schema extraction: {schema_sample} - {e}"
+                )
+                })?;
+
+                let schema = df_sample.schema();
+            }
+            // support skipping schema inference for jsonl
+
+            let mut reader = LazyJsonLineReader::new(&input_config.location);
+            if let Some(schema) = schema {
+                reader = reader.with_schema(Some(Arc::new(schema.clone())));
+            }
+            reader.finish().map_err(RunnerError::Polars)?.lazy()
+        }
+        InputFormat::Json => LazyJsonLineReader::new(&input_config.location)
             .finish()
             .map_err(RunnerError::Polars)?
             .lazy(),
-        ("json", _) => JsonReader::new(load_local_path(input_path)?)
+        InputFormat::Parquet { .. } => {
+            LazyFrame::scan_parquet(&input_config.location, Default::default())
+                .map_err(RunnerError::Polars)?
+        }
+        InputFormat::Ipc => LazyFrame::scan_ipc(&input_config.location, Default::default())
+            .map_err(RunnerError::Polars)?,
+        InputFormat::Avro => AvroReader::new(load_local_path(&input_config.location)?)
             .finish()
             .map_err(RunnerError::Polars)?
             .lazy(),
-        ("parquet", false) => {
-            LazyFrame::scan_parquet(input_path, Default::default()).map_err(RunnerError::Polars)?
-        }
-        ("ipc", false) => {
-            LazyFrame::scan_ipc(input_path, Default::default()).map_err(RunnerError::Polars)?
-        }
-        ("avro", false) => AvroReader::new(load_local_path(input_path)?)
-            .finish()
-            .map_err(RunnerError::Polars)?
-            .lazy(),
-        _ => {
-            error!(
-                "Unsupported file format. Supported formats are: csv, json, parquet, ipc, avro."
-            );
-            return Err(RunnerError::Other(format!(
-                "Unsupported file format and cloud {file_format} in the cloud {is_cloud}"
-            )));
-        }
     };
     Ok(df)
 }
 
-pub fn run_with_output(
-    config: Config,
-    input_path: String,
-    file_format: String,
-    is_cloud: bool,
-) -> Result<(), RunnerError> {
-    let df = run(&config, &input_path, &file_format, is_cloud)?;
+pub fn run_with_output(config: Config) -> Result<(), RunnerError> {
+    let df = run(&config)?;
     if let Some(output_configs) = config.outputs.as_ref() {
         for output_config in output_configs.iter() {
             let output: Box<dyn OutputConnector> = output_config
@@ -267,13 +270,8 @@ pub fn run_with_output(
     Ok(())
 }
 
-pub fn run(
-    config: &Config,
-    input_path: &str,
-    file_format: &str,
-    is_cloud: bool,
-) -> Result<LazyFrame, RunnerError> {
-    let df = dataframe_from_file(&input_path, &file_format, is_cloud)?;
+pub fn run(config: &Config) -> Result<LazyFrame, RunnerError> {
+    let df = dataframe_from_file(&config)?;
     let df = process_dataframe(df, &config)?;
 
     Ok(df)

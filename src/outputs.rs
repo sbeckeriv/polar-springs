@@ -1,17 +1,16 @@
 use polars::prelude::{
-    CsvWriter, CsvWriterOptions, DataFrame, LazyFrame, ParquetCompression, ParquetWriteOptions,
-    ParquetWriter, SerializeOptions,
+    CsvWriter, LazyFrame,
+    ParquetWriter,
 };
 use polars_io::{
     avro::AvroWriter,
-    ipc::{IpcStreamWriter, IpcWriterOptions},
-    json::{JsonFormat, JsonWriter, JsonWriterOptions},
+    ipc::IpcStreamWriter,
+    json::{JsonFormat, JsonWriter},
     SerWriter,
 };
 use std::{
     fs::File,
     io::{self, Write},
-    path::{self, Path},
 };
 
 use crate::configs::output::{

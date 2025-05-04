@@ -3,7 +3,6 @@ use std::path::Path;
 use std::sync::Once;
 
 mod test_utils;
-use test_utils::parse_config_str;
 
 static START: Once = Once::new();
 
@@ -27,8 +26,12 @@ condition = "GTE"
 filter = 400
 "#;
     let input = setup_test_logs();
+    let mut config = polars_cli::config::parse_config(config);
+    let input_config = polars_cli::config::InputConfig::new(&input, "jsonl", false, false);
+    config.input = Some(input_config);
 
-    let result = run(&parse_config_str(config), &input, &"jsonl", false);
+    let result = run(&config);
+    let result = result.and_then(|df| df.collect().map_err(polars_cli::runner::RunnerError::from));
     dbg!("Result: {:?}", &result);
     assert!(result.is_ok(), "Filter operation failed");
 }
