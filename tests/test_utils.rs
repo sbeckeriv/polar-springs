@@ -31,8 +31,9 @@ macro_rules! config_string_test {
         fn $test_name() {
             let config = $config;
             let input = test_utils::setup_test_logs();
-            let mut config = polars_cli::config::parse_config(config);
-            let input_config = polars_cli::config::InputConfig::new(&input, "jsonl", false, false);
+            let mut config = polars_cli::configs::parse::parse_config(config);
+            let input_config =
+                polars_cli::configs::input::InputConfig::new(&input, "jsonl", false, false);
             config.input = Some(input_config);
 
             let result = polars_cli::runner::run(&config);

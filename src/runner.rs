@@ -1,5 +1,6 @@
 use crate::{
-    config::{self, Config, InputFormat},
+    config::{self, Config},
+    configs::input::InputFormat,
     outputs::OutputConnector,
 };
 use polars::prelude::*;

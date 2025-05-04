@@ -1,5 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use polars_cli::config::parse_config;
+use polars_cli::configs::parse::parse_config;
 use polars_cli::runner::{dataframe_from_file, process_dataframe};
 
 fn bench_process_dataframe(c: &mut Criterion) {

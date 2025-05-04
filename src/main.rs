@@ -1,8 +1,7 @@
 use clap::Parser;
 use clap_derive::Parser;
 use polars_cli::{
-    config::{parse_config_file, InputConfig},
-    runner::run_with_output,
+    configs::input::InputConfig, configs::parse::parse_config_file, runner::run_with_output,
 };
 use tracing::info;
 
@@ -31,14 +30,12 @@ struct Cli {
 }
 
 fn main() {
-    // Initialize tracing
     tracing_subscriber::fmt::init();
 
     let cli = Cli::parse();
-
     info!("Parsing TOML configuration from: {}", cli.config);
-    // Pass cloud_options to runner::run or use as needed
     let mut config = parse_config_file(&cli.config);
+
     if cli.parse {
         std::process::exit(0);
     } else {
