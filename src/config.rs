@@ -86,6 +86,15 @@ pub enum Operation {
     Rename {
         mappings: Vec<ColumnRename>,
     },
+    Pivot {
+        index: Vec<String>,
+        columns: Vec<String>,
+        values: Vec<String>,
+        #[serde(default)]
+        sort_columns: bool,
+        #[serde(default)]
+        aggregate_function: Option<AllowedGroupFunction>,
+    },
 }
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "lowercase")]

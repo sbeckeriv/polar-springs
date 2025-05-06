@@ -157,6 +157,13 @@ pub fn process_dataframe(mut df: LazyFrame, config: &Config) -> Result<LazyFrame
                     .map_err(RunnerError::Polars)?
                     .lazy();
             }
+            config::Operation::Pivot {
+                index,
+                columns,
+                values,
+                sort_columns,
+                aggregate_function,
+            } => todo!(),
         }
     }
     Ok(df)
