@@ -1,6 +1,6 @@
 use crate::configs::{input::InputConfig, output::OutputConfig, schema::Schema};
 use polars::prelude::{
-    col, lit, when, DataType, Expr, QuantileMethod, RollingOptionsFixedWindow, NULL,
+    col, lit, when, DataType, Expr, QuantileMethod, RollingOptionsFixedWindow, RoundMode, NULL,
 };
 use serde::Deserialize;
 
@@ -535,7 +535,9 @@ impl Expression {
                     }
                     ExpressionFunction::ABS { column } => Ok(col(column).abs()),
                     ExpressionFunction::SUM { column } => Ok(col(column).sum()),
-                    ExpressionFunction::ROUND { column, num } => Ok(col(column).round(*num)),
+                    ExpressionFunction::ROUND { column, num } => {
+                        Ok(col(column).round(*num, RoundMode::HalfAwayFromZero))
+                    }
                     ExpressionFunction::TOINT { size, column } => {
                         let col = col(column);
                         match size {
