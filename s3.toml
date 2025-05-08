@@ -1,0 +1,14 @@
+[input]
+# requires aws credentials file in ~/.aws/credentials
+# https://openalex.s3.amazonaws.com/browse.html#data/works/
+# https://openalex.s3.amazonaws.com/data/works/updated_date%3D2023-05-17/part_000.gz empty example
+location = "s3://openalex/data/works/updated_date=2025-05-06/part_006.gz"
+type = "JsonLines"
+skip_sample = true
+
+[[operations]]
+type = "Select"
+columns = ["id", "title", "display_name"]
+[[outputs]]
+type = "Stdout"
+format = "Jsonl"

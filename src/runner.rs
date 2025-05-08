@@ -4,10 +4,12 @@ use crate::{
     outputs::OutputConnector,
 };
 use polars::prelude::*;
-use polars_io::avro::AvroReader;
+use polars_io::{avro::AvroReader, cloud::CloudOptions};
 use std::{
+    collections::HashMap,
     fs::{self, File},
     io::{BufRead, BufReader},
+    iter::Scan,
 };
 use tracing::info;
 
@@ -206,7 +208,7 @@ pub fn dataframe_from_file(config: &Config) -> Result<LazyFrame, RunnerError> {
             is_cloud,
             skip_sample,
         } => {
-            let schema: Option<Schema> = None;
+            let mut schema: Option<_> = None;
             if !skip_sample {
                 let sample_file = std::fs::File::open(&input_config.location)
                     .map_err(|e| format!("Error reading local file for schema extraction: {e}"))?;
@@ -235,13 +237,14 @@ pub fn dataframe_from_file(config: &Config) -> Result<LazyFrame, RunnerError> {
                 )
                 })?;
 
-                let schema = df_sample.schema();
+                schema = Some(df_sample.schema().clone());
             }
             // support skipping schema inference for jsonl
 
-            let mut reader = LazyJsonLineReader::new(&input_config.location);
+            let mut reader =
+                LazyJsonLineReader::new(&input_config.location).with_ignore_errors(true);
             if let Some(schema) = schema {
-                reader = reader.with_schema(Some(Arc::new(schema.clone())));
+                reader = reader.with_schema(Some(schema.clone()));
             }
             reader.finish().map_err(RunnerError::Polars)?.lazy()
         }
@@ -250,11 +253,27 @@ pub fn dataframe_from_file(config: &Config) -> Result<LazyFrame, RunnerError> {
             .map_err(RunnerError::Polars)?
             .lazy(),
         InputFormat::Parquet { .. } => {
-            LazyFrame::scan_parquet(&input_config.location, Default::default())
-                .map_err(RunnerError::Polars)?
+            let mut args = ScanArgsParquet::default();
+            let cloud_options = CloudOptions::from_untyped_config(
+                &input_config.location,
+                HashMap::<String, String>::new(),
+            );
+            if let Ok(cloud_options) = cloud_options {
+                args.cloud_options = Some(cloud_options);
+            }
+            LazyFrame::scan_parquet(&input_config.location, args).map_err(RunnerError::Polars)?
         }
-        InputFormat::Ipc => LazyFrame::scan_ipc(&input_config.location, Default::default())
-            .map_err(RunnerError::Polars)?,
+        InputFormat::Ipc => {
+            let mut args = ScanArgsIpc::default();
+            let cloud_options = CloudOptions::from_untyped_config(
+                &input_config.location,
+                HashMap::<String, String>::new(),
+            );
+            if let Ok(cloud_options) = cloud_options {
+                args.cloud_options = Some(cloud_options);
+            }
+            LazyFrame::scan_ipc(&input_config.location, args).map_err(RunnerError::Polars)?
+        }
         InputFormat::Avro => AvroReader::new(load_local_path(&input_config.location)?)
             .finish()
             .map_err(RunnerError::Polars)?

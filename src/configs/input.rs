@@ -43,6 +43,7 @@ fn default_true() -> bool {
     true
 }
 #[derive(Deserialize, Debug)]
+#[serde(tag = "type")]
 pub enum InputFormat {
     Csv {
         #[serde(default)]
