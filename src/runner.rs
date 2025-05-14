@@ -158,13 +158,7 @@ pub fn process_dataframe(mut df: LazyFrame, config: &Config) -> Result<LazyFrame
                     .map_err(RunnerError::Polars)?
                     .lazy();
             }
-            config::Operation::Pivot {
-                index,
-                columns,
-                values,
-                sort_columns,
-                aggregate_function,
-            } => todo!(),
+            config::Operation::Pivot { .. } => todo!(),
         }
     }
     Ok(df)
@@ -190,10 +184,9 @@ pub fn dataframe_from_file(config: &Config) -> Result<LazyFrame, RunnerError> {
 
     let df = match &input_config.format {
         InputFormat::Csv {
-            is_cloud,
             delimiter,
             has_header,
-            schema,
+            ..
         } => {
             let delimiter = delimiter.as_bytes().first().expect("delimiter is empty");
             LazyCsvReader::new(input_config.location.clone())
@@ -203,10 +196,7 @@ pub fn dataframe_from_file(config: &Config) -> Result<LazyFrame, RunnerError> {
                 .map_err(RunnerError::Polars)?
                 .lazy()
         }
-        InputFormat::JsonLines {
-            is_cloud,
-            skip_sample,
-        } => {
+        InputFormat::JsonLines { skip_sample, .. } => {
             let mut schema: Option<_> = None;
             if !skip_sample {
                 let sample_file = std::fs::File::open(&input_config.location)

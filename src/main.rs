@@ -4,7 +4,6 @@ use polars_cli::{
     configs::input::InputConfig, configs::parse::parse_config_file, runner::run_with_output,
 };
 use tracing::info;
-
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 struct Cli {

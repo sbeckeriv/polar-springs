@@ -62,7 +62,7 @@ impl Schema {
                     ));
                 }
                 // Allowed values
-                if let Some(allowed) = &col.allow {
+                if let Some(_allowed) = &col.allow {
                     todo!("allow values check");
                 }
                 // Min/max (only for numeric types)

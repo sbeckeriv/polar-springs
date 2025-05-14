@@ -486,9 +486,9 @@ impl Expression {
                         None,
                     ),
                 )),
-                LiteralValue::StringList(items) => todo!(),
-                LiteralValue::IntegerList(items) => todo!(),
-                LiteralValue::FloatList(items) => todo!(),
+                LiteralValue::StringList(_items) => todo!(),
+                LiteralValue::IntegerList(_items) => todo!(),
+                LiteralValue::FloatList(_items) => todo!(),
             },
 
             Expression::BinaryOp { left, op, right } => {
@@ -658,9 +658,9 @@ fn lit_to_expr(value: &LiteralValue) -> Expr {
         LiteralValue::DateTime(date_time) => lit(date_time.timestamp_millis()).cast(
             polars::prelude::DataType::Datetime(polars::prelude::TimeUnit::Milliseconds, None),
         ),
-        LiteralValue::StringList(items) => todo!(),
-        LiteralValue::IntegerList(items) => todo!(),
-        LiteralValue::FloatList(items) => todo!(),
+        LiteralValue::StringList(_items) => todo!(),
+        LiteralValue::IntegerList(_items) => todo!(),
+        LiteralValue::FloatList(_items) => todo!(),
     }
 }
 
@@ -700,10 +700,8 @@ impl Operation {
                 column,
                 function,
                 partition_by,
-                order_by,
-                descending,
-                bounds,
                 name,
+                ..
             } => {
                 let partition_exprs: Vec<Expr> = partition_by.iter().map(col).collect();
 
