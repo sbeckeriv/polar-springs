@@ -1,16 +1,18 @@
 use polars::prelude::{
-    CsvWriter, LazyFrame,
-    ParquetWriter,
+    file::DynWriteable, sync_on_close::SyncOnCloseType, CsvWriter, CsvWriterOptions, LazyFrame,
+    ParquetWriteOptions, ParquetWriter, SinkOptions, SinkTarget, SpecialEq,
 };
 use polars_io::{
     avro::AvroWriter,
-    ipc::IpcStreamWriter,
-    json::{JsonFormat, JsonWriter},
+    ipc::{IpcStreamWriter, IpcWriterOptions},
+    json::{JsonFormat, JsonWriter, JsonWriterOptions},
     SerWriter,
 };
 use std::{
     fs::File,
     io::{self, Write},
+    path::PathBuf,
+    sync::{Arc, Mutex},
 };
 
 use crate::configs::output::{
@@ -47,6 +49,68 @@ impl From<String> for OutputError {
 
 pub trait OutputConnector {
     fn format(&self) -> OutputFormats;
+    fn sink_target(&self) -> Option<SinkTarget> {
+        None
+    }
+
+    fn stream(&self, df: LazyFrame) -> Result<(), OutputError> {
+        let sink_options = SinkOptions::default();
+        let target = self.sink_target().expect("Sink target should never fail");
+
+        let _result = match &self.format() {
+            OutputFormats::Csv => LazyFrame::sink_csv(
+                df,
+                target,
+                CsvWriterOptions {
+                    include_header: true,
+                    ..Default::default()
+                },
+                None,
+                sink_options,
+            )
+            .map_err(|e| OutputError::Io(format!("Failed to write CSV sink: {}", e)))?,
+            OutputFormats::Json => {
+                LazyFrame::sink_json(df, target, JsonWriterOptions::default(), None, sink_options)
+                    .map_err(|e| OutputError::Io(format!("Failed to write Json sink: {}", e)))?
+            }
+            OutputFormats::Jsonl => {
+                LazyFrame::sink_json(df, target, JsonWriterOptions {}, None, sink_options)
+                    .map_err(|e| OutputError::Io(format!("Failed to write Json sink: {}", e)))?
+            }
+            OutputFormats::Parquet => LazyFrame::sink_parquet(
+                df,
+                target,
+                ParquetWriteOptions::default(),
+                None,
+                sink_options,
+            )
+            .map_err(|e| OutputError::Io(format!("Failed to write Parquet sink: {}", e)))?,
+            OutputFormats::Avro => {
+                todo!();
+                /*
+                               let mut df = df.collect().map_err(|e| {
+                                   OutputError::Io(format!("Failed to collect DataFrame for Avro: {}", e))
+                               })?;
+                               AvroWriter::new(&mut file)
+                                   .finish(&mut df)
+                                   .map_err(|e| OutputError::Io(format!("Failed to write Arrow: {}", e)))?
+                */
+            }
+            OutputFormats::Icp { compression } => LazyFrame::sink_ipc(
+                df,
+                target,
+                IpcWriterOptions {
+                    compression: compression.as_ref().map(Into::into),
+                    ..Default::default()
+                },
+                None,
+                sink_options,
+            )
+            .map_err(|e| OutputError::Io(format!("Failed to write ICP sink: {}", e)))?,
+        };
+        Ok(())
+    }
+
     fn write(&self, df: LazyFrame) -> Result<(), OutputError> {
         let mut df = df
             .collect()
@@ -125,6 +189,17 @@ impl OutputConnector for Stderr {
     fn file(&self) -> Box<dyn Write> {
         Box::new(io::stderr())
     }
+    fn stream(&self, df: LazyFrame) -> Result<(), OutputError> {
+        self.write(df)
+            .map_err(|e| OutputError::Io(format!("Failed to write to stderr: {}", e)))?;
+        Ok(())
+    }
+
+    fn sink_target(&self) -> Option<SinkTarget> {
+        Some(SinkTarget::Dyn(SpecialEq::new(Arc::new(Mutex::new(Some(
+            Box::new(StdWriter::stderr()) as Box<dyn polars_io::utils::file::DynWriteable>,
+        ))))))
+    }
 
     fn format(&self) -> OutputFormats {
         self.config.format.clone()
@@ -138,6 +213,18 @@ impl OutputConnector for Stdout {
     fn file(&self) -> Box<dyn Write> {
         Box::new(io::stdout())
     }
+    // streaming is not working.
+    fn stream(&self, df: LazyFrame) -> Result<(), OutputError> {
+        self.write(df)
+            .map_err(|e| OutputError::Io(format!("Failed to write to stderr: {}", e)))?;
+        Ok(())
+    }
+
+    fn sink_target(&self) -> Option<SinkTarget> {
+        Some(SinkTarget::Dyn(SpecialEq::new(Arc::new(Mutex::new(Some(
+            Box::new(StdWriter::stdout()) as Box<dyn polars_io::utils::file::DynWriteable>,
+        ))))))
+    }
 
     fn format(&self) -> OutputFormats {
         self.config.format.clone()
@@ -150,78 +237,11 @@ impl OutputConnector for FileOutput {
     fn file(&self) -> Box<dyn Write> {
         Box::new(File::create(self.config.path.clone()).expect("could not create file"))
     }
-    /*
-    Application error: Other error: Could not write output - IO error: Failed to write CSV sink: sink_Csv(CsvWriterOptions { include_bom: false, include_header: true, batch_size: 1024, maintain_order: true, serialize_options: SerializeOptions { date_format: None, time_format: None, datetime_format: None, float_scientific: None, float_precision: None, separator: 44, quote_char: 34, null: "", line_terminator: "\n", quote_style: Necessary } }) not yet supported in standard engine. Use 'collect().write_Csv(CsvWriterOptions { include_bom: false, include_header: true, batch_size: 1024, maintain_order: true, serialize_options: SerializeOptions { date_format: None, time_format: None, datetime_format: None, float_scientific: None, float_precision: None, separator: 44, quote_char: 34, null: "", line_terminator: "\n", quote_style: Necessary } })()'
-        fn write(&self, df: LazyFrame) -> Result<(), OutputError> {
-            let mut df = df;
-            let mut file = self.file();
-            let path = Path::new(&self.config.path);
-            match &self.format() {
-                OutputFormats::Csv => {
-                    LazyFrame::sink_csv(
-                        df,
-                        path,
-                        CsvWriterOptions {
-                            include_header: true,
-                            maintain_order: true,
-                            serialize_options: SerializeOptions {
-                                separator: b',',
-                                ..Default::default()
-                            },
-                            ..Default::default()
-                        },
-                        None,
-                    )
-                    .map_err(|e| OutputError::Io(format!("Failed to write CSV sink: {}", e)))?;
-                }
-                OutputFormats::Json => {
-                    LazyFrame::sink_json(
-                        df,
-                        path,
-                        JsonWriterOptions {
-                            maintain_order: true,
-                        },
-                        None,
-                    )
-                    .map_err(|e| OutputError::Io(format!("Failed to write Json sink: {}", e)))?;
-                }
-                OutputFormats::Jsonl => {
-                    let mut df = df.collect().map_err(|e| {
-                        OutputError::Io(format!("Failed to collect DataFrame for JSONL: {}", e))
-                    })?;
-                    JsonWriter::new(&mut file)
-                        .with_json_format(JsonFormat::JsonLines)
-                        .finish(&mut df)
-                        .map_err(|e| OutputError::Io(format!("Failed to write JSONLine: {}", e)))?;
-                }
-                OutputFormats::Parquet => {
-                    LazyFrame::sink_parquet(df, &path, ParquetWriteOptions::default(), None)
-                        .map_err(|e| OutputError::Io(format!("Failed to write Parquet sink: {}", e)))?;
-                }
-                OutputFormats::Avro => {
-                    let mut df = df.collect().map_err(|e| {
-                        OutputError::Io(format!("Failed to collect DataFrame for Avro: {}", e))
-                    })?;
-                    AvroWriter::new(&mut file)
-                        .finish(&mut df)
-                        .map_err(|e| OutputError::Io(format!("Failed to write Arrow: {}", e)))?;
-                }
-                OutputFormats::Icp { compression } => {
-                    LazyFrame::sink_ipc(
-                        df,
-                        path,
-                        IpcWriterOptions {
-                            compression: compression.as_ref().map(Into::into),
-                            ..Default::default()
-                        },
-                        None,
-                    )
-                    .map_err(|e| OutputError::Io(format!("Failed to write ICP sink: {}", e)))?;
-                }
-            }
-            Ok(())
-        }
-     */
+    fn sink_target(&self) -> Option<SinkTarget> {
+        Some(SinkTarget::Path(Arc::new(PathBuf::from(
+            self.config.path.clone(),
+        ))))
+    }
     fn format(&self) -> OutputFormats {
         self.config.format.clone()
     }
@@ -259,5 +279,63 @@ impl OutputConnector for CloudOutput {
 
     fn format(&self) -> OutputFormats {
         todo!()
+    }
+}
+
+pub enum StdStream {
+    Stdout,
+    Stderr,
+}
+
+pub struct StdWriter(StdStream);
+
+impl StdWriter {
+    pub fn new(stream: StdStream) -> Self {
+        StdWriter(stream)
+    }
+
+    pub fn stdout() -> Self {
+        Self::new(StdStream::Stdout)
+    }
+
+    pub fn stderr() -> Self {
+        Self::new(StdStream::Stderr)
+    }
+}
+
+impl DynWriteable for StdWriter {
+    fn as_dyn_write(&self) -> &(dyn io::Write + Send + 'static) {
+        self
+    }
+
+    fn as_mut_dyn_write(&mut self) -> &mut (dyn io::Write + Send + 'static) {
+        self
+    }
+
+    fn close(self: Box<Self>) -> io::Result<()> {
+        match self.0 {
+            StdStream::Stdout => std::io::stdout().flush(),
+            StdStream::Stderr => std::io::stderr().flush(),
+        }
+    }
+
+    fn sync_on_close(&mut self, _sync_on_close: SyncOnCloseType) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+impl io::Write for StdWriter {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        match self.0 {
+            StdStream::Stdout => std::io::stdout().write(buf),
+            StdStream::Stderr => std::io::stderr().write(buf),
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        match self.0 {
+            StdStream::Stdout => std::io::stdout().flush(),
+            StdStream::Stderr => std::io::stderr().flush(),
+        }
     }
 }

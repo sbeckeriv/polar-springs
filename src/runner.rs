@@ -290,7 +290,7 @@ pub fn run_with_output(config: Config) -> Result<(), RunnerError> {
                 .try_into()
                 .map_err(|e| RunnerError::Other(format!("Could not convert to output {e}")))?;
             output
-                .write(df.clone())
+                .stream(df.clone())
                 .map_err(|e| RunnerError::Other(format!("Could not write output - {e}")))?;
         }
     }
