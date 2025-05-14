@@ -9,7 +9,6 @@ use std::{
     collections::HashMap,
     fs::{self, File},
     io::{BufRead, BufReader},
-    iter::Scan,
 };
 use tracing::info;
 
