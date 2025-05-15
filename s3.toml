@@ -9,6 +9,12 @@ skip_sample = true
 [[operations]]
 type = "Select"
 columns = ["id", "title", "display_name"]
+#streams
 [[outputs]]
-type = "Stdout"
+type = "File"
+path = "output.jsonl"
 format = "Jsonl"
+# doesnt stream
+#[[outputs]]
+#type = "Stdout"
+#format = "Jsonl"

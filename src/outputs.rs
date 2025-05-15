@@ -54,10 +54,15 @@ pub trait OutputConnector {
     }
 
     fn stream(&self, df: LazyFrame) -> Result<(), OutputError> {
-        let sink_options = SinkOptions::default();
+        let sink_options = SinkOptions {
+            sync_on_close: SyncOnCloseType::Data,
+            maintain_order: true,
+            mkdir: true,
+        };
         let target = self.sink_target().expect("Sink target should never fail");
+        dbg!(&target);
 
-        let _result = match &self.format() {
+        let result = match &self.format() {
             OutputFormats::Csv => LazyFrame::sink_csv(
                 df,
                 target,
@@ -108,6 +113,9 @@ pub trait OutputConnector {
             )
             .map_err(|e| OutputError::Io(format!("Failed to write ICP sink: {}", e)))?,
         };
+        result
+            .collect()
+            .map_err(|e| OutputError::Io(format!("Failed to collect DataFrame for sink: {}", e)))?;
         Ok(())
     }
 
