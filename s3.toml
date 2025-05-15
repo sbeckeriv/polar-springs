@@ -14,7 +14,7 @@ columns = ["id", "title", "display_name"]
 type = "File"
 path = "output.jsonl"
 format = "Jsonl"
-# doesnt stream
+# doesnt stream well
 #[[outputs]]
 #type = "Stdout"
 #format = "Jsonl"

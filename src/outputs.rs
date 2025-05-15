@@ -221,12 +221,6 @@ impl OutputConnector for Stdout {
     fn file(&self) -> Box<dyn Write> {
         Box::new(io::stdout())
     }
-    // streaming is not working.
-    fn stream(&self, df: LazyFrame) -> Result<(), OutputError> {
-        self.write(df)
-            .map_err(|e| OutputError::Io(format!("Failed to write to stderr: {}", e)))?;
-        Ok(())
-    }
 
     fn sink_target(&self) -> Option<SinkTarget> {
         Some(SinkTarget::Dyn(SpecialEq::new(Arc::new(Mutex::new(Some(
@@ -245,10 +239,11 @@ impl OutputConnector for FileOutput {
     fn file(&self) -> Box<dyn Write> {
         Box::new(File::create(self.config.path.clone()).expect("could not create file"))
     }
+
     fn sink_target(&self) -> Option<SinkTarget> {
-        Some(SinkTarget::Path(Arc::new(PathBuf::from(
-            self.config.path.clone(),
-        ))))
+        Some(SinkTarget::Dyn(SpecialEq::new(Arc::new(Mutex::new(Some(
+            Box::new(StdWriter::stderr()) as Box<dyn polars_io::utils::file::DynWriteable>,
+        ))))))
     }
     fn format(&self) -> OutputFormats {
         self.config.format.clone()
