@@ -4,9 +4,9 @@ use polars_cli::runner::{dataframe_from_file, process_dataframe};
 
 fn bench_process_dataframe(c: &mut Criterion) {
     let s = r#"
-[[input]]
-type = "Jsonl"
-path = "expanded_big_test.json"
+[input]
+type = "JsonLines"
+location = "expanded_big_test.json"
 
 [[operations]]
 type = "WithColumn"
@@ -20,7 +20,7 @@ columns = ["timestamp", "total_processing_time",  "endpoint", "status_code", "re
     let config = parse_config(s);
 
     let df = dataframe_from_file(&config)
-        .expect("Failed to read file: expaned_big_test.json run `just` to generate it");
+        .expect("Failed to read file: expanded_big_test.json run `just` to generate it");
     c.bench_function("process_dataframe", |b| {
         b.iter(|| {
             let result = process_dataframe(black_box(df.clone()), black_box(&config));
