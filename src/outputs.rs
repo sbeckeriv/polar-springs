@@ -11,7 +11,6 @@ use polars_io::{
 use std::{
     fs::File,
     io::{self, Write},
-    path::PathBuf,
     sync::{Arc, Mutex},
 };
 
